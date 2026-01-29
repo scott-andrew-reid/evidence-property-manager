@@ -30,15 +30,36 @@ async function main() {
       'utf-8'
     );
     
-    // Split by semicolons and execute each statement
+    // Split and clean SQL statements
     const statements = schemaSQL
-      .split(';')
+      .split(/;[\s\n]*(?=CREATE|INSERT|--)/i) // Split on semicolon followed by CREATE/INSERT/comment
       .map(s => s.trim())
-      .filter(s => s.length > 0 && !s.startsWith('--'));
+      .filter(s => {
+        // Filter out comments and empty statements
+        if (!s) return false;
+        if (s.startsWith('--')) return false;
+        // Keep statements that start with SQL keywords
+        return /^(CREATE|INSERT|ALTER|DROP)/i.test(s);
+      })
+      .map(s => s.endsWith(';') ? s : s + ';'); // Ensure semicolon
     
-    for (const statement of statements) {
-      if (statement.trim()) {
-        await sql.unsafe(statement);
+    console.log(`   Executing ${statements.length} SQL statements...`);
+    
+    for (let i = 0; i < statements.length; i++) {
+      const stmt = statements[i];
+      try {
+        await sql.unsafe(stmt);
+      } catch (err) {
+        // Ignore "already exists" errors
+        if (err.message && (
+          err.message.includes('already exists') ||
+          err.message.includes('duplicate key')
+        )) {
+          // Silent continue
+        } else {
+          console.error(`   Error in statement ${i + 1}:`, err.message);
+          throw err;
+        }
       }
     }
     console.log('✅ Enhanced schema created\n');
