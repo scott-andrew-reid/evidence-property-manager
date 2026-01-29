@@ -73,95 +73,58 @@ export async function GET(request: NextRequest) {
       conditions.push(sql`e.current_custodian_id = ${parseInt(custodianId)}`);
     }
     
-    // Combine all conditions
-    let finalQuery;
-    if (conditions.length > 0) {
-      // We need to build the query more carefully
-      const baseQuery = `
-        SELECT 
-          e.*,
-          t.name as item_type_name,
-          t.category as item_type_category,
-          l.name as current_location_name,
-          a.full_name as current_custodian_name,
-          a.badge_number as current_custodian_badge,
-          u.full_name as created_by_name
-        FROM evidence_items_v2 e
-        LEFT JOIN item_types t ON e.item_type_id = t.id
-        LEFT JOIN locations l ON e.current_location_id = l.id
-        LEFT JOIN analysts a ON e.current_custodian_id = a.id
-        LEFT JOIN users u ON e.created_by = u.id
-        WHERE 1=1
-      `;
-      
-      let whereClause = '';
-      const values: any[] = [];
-      let paramIndex = 1;
-      
-      if (search) {
-        whereClause += ` AND (
-          e.case_number ILIKE $${paramIndex} OR
-          e.item_number ILIKE $${paramIndex} OR
-          e.description ILIKE $${paramIndex} OR
-          e.serial_number ILIKE $${paramIndex} OR
-          e.make_model ILIKE $${paramIndex}
-        )`;
-        values.push('%' + search + '%');
-        paramIndex++;
-      }
-      
-      if (caseNumber) {
-        whereClause += ` AND e.case_number = $${paramIndex}`;
-        values.push(caseNumber);
-        paramIndex++;
-      }
-      
-      if (status) {
-        whereClause += ` AND e.current_status = $${paramIndex}`;
-        values.push(status);
-        paramIndex++;
-      }
-      
-      if (locationId) {
-        whereClause += ` AND e.current_location_id = $${paramIndex}`;
-        values.push(parseInt(locationId));
-        paramIndex++;
-      }
-      
-      if (typeId) {
-        whereClause += ` AND e.item_type_id = $${paramIndex}`;
-        values.push(parseInt(typeId));
-        paramIndex++;
-      }
-      
-      if (custodianId) {
-        whereClause += ` AND e.current_custodian_id = $${paramIndex}`;
-        values.push(parseInt(custodianId));
-        paramIndex++;
-      }
-      
-      const fullQuery = baseQuery + whereClause + ' ORDER BY e.created_at DESC';
-      finalQuery = await sql.unsafe(fullQuery, values);
-    } else {
-      finalQuery = await sql`
-        SELECT 
-          e.*,
-          t.name as item_type_name,
-          t.category as item_type_category,
-          l.name as current_location_name,
-          a.full_name as current_custodian_name,
-          a.badge_number as current_custodian_badge,
-          u.full_name as created_by_name
-        FROM evidence_items_v2 e
-        LEFT JOIN item_types t ON e.item_type_id = t.id
-        LEFT JOIN locations l ON e.current_location_id = l.id
-        LEFT JOIN analysts a ON e.current_custodian_id = a.id
-        LEFT JOIN users u ON e.created_by = u.id
-        ORDER BY e.created_at DESC
-      `;
+    // For simplicity with neon serverless, let's fetch all and filter in memory for now
+    // In production with large datasets, you'd want proper parameterized queries
+    let items = await sql`
+      SELECT 
+        e.*,
+        t.name as item_type_name,
+        t.category as item_type_category,
+        l.name as current_location_name,
+        a.full_name as current_custodian_name,
+        a.badge_number as current_custodian_badge,
+        u.full_name as created_by_name
+      FROM evidence_items_v2 e
+      LEFT JOIN item_types t ON e.item_type_id = t.id
+      LEFT JOIN locations l ON e.current_location_id = l.id
+      LEFT JOIN analysts a ON e.current_custodian_id = a.id
+      LEFT JOIN users u ON e.created_by = u.id
+      ORDER BY e.created_at DESC
+    `;
+    
+    // Apply filters in JavaScript
+    if (search) {
+      const searchLower = search.toLowerCase();
+      items = items.filter(item => 
+        item.case_number?.toLowerCase().includes(searchLower) ||
+        item.item_number?.toLowerCase().includes(searchLower) ||
+        item.description?.toLowerCase().includes(searchLower) ||
+        item.serial_number?.toLowerCase().includes(searchLower) ||
+        item.make_model?.toLowerCase().includes(searchLower)
+      );
+    }
+    
+    if (caseNumber) {
+      items = items.filter(item => item.case_number === caseNumber);
+    }
+    
+    if (status) {
+      items = items.filter(item => item.current_status === status);
+    }
+    
+    if (locationId) {
+      items = items.filter(item => item.current_location_id === parseInt(locationId));
+    }
+    
+    if (typeId) {
+      items = items.filter(item => item.item_type_id === parseInt(typeId));
+    }
+    
+    if (custodianId) {
+      items = items.filter(item => item.current_custodian_id === parseInt(custodianId));
     }
 
-    return NextResponse.json({ items: finalQuery });
+    return NextResponse.json({ items });
   } catch (error: any) {
     console.error('Failed to fetch evidence:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
