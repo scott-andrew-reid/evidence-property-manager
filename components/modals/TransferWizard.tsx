@@ -13,6 +13,7 @@ interface TransferWizardProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess: () => void
+  preSelectedItems?: number[]
 }
 
 interface NewEvidenceItem {
@@ -60,7 +61,7 @@ interface TransferReason {
   requires_approval: boolean
 }
 
-export function TransferWizard({ open, onOpenChange, onSuccess }: TransferWizardProps) {
+export function TransferWizard({ open, onOpenChange, onSuccess, preSelectedItems = [] }: TransferWizardProps) {
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [pdfUrl, setPdfUrl] = useState<string>('')
@@ -108,14 +109,38 @@ export function TransferWizard({ open, onOpenChange, onSuccess }: TransferWizard
       loadLookups()
       // Reset wizard
       setStep(1)
-      setItemMode('new')
       setNewItems([])
       setExistingItems([])
       setSearchQuery('')
       setSearchResults([])
       setNewItemForm({ case_number: '', item_type_id: '', description: '' })
+      
+      // Handle pre-selected items
+      if (preSelectedItems.length > 0) {
+        setItemMode('existing')
+        loadPreSelectedItems()
+      } else {
+        setItemMode('new')
+      }
     }
-  }, [open])
+  }, [open, preSelectedItems])
+  
+  async function loadPreSelectedItems() {
+    if (preSelectedItems.length === 0) return
+    
+    try {
+      const response = await fetch(`/api/evidence-v2`)
+      if (!response.ok) return
+      
+      const data = await response.json()
+      const selected = data.items.filter((item: ExistingEvidenceItem) => 
+        preSelectedItems.includes(item.id)
+      )
+      setExistingItems(selected)
+    } catch (error) {
+      console.error('Failed to load pre-selected items:', error)
+    }
+  }
 
   async function loadLookups() {
     try {

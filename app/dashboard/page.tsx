@@ -40,6 +40,7 @@ export default function DashboardV2() {
   const [items, setItems] = useState<EvidenceItem[]>([])
   const [loading, setLoading] = useState(true)
   const [showTransferWizard, setShowTransferWizard] = useState(false)
+  const [selectedItems, setSelectedItems] = useState<number[]>([])
   
   // Filter state
   const [searchQuery, setSearchQuery] = useState('')
@@ -122,6 +123,31 @@ export default function DashboardV2() {
     setFilterLocation('')
     setFilterType('')
   }
+  
+  function toggleSelectItem(id: number) {
+    setSelectedItems(prev => 
+      prev.includes(id) 
+        ? prev.filter(i => i !== id)
+        : [...prev, id]
+    )
+  }
+  
+  function toggleSelectAll() {
+    if (selectedItems.length === items.length) {
+      setSelectedItems([])
+    } else {
+      setSelectedItems(items.map(i => i.id))
+    }
+  }
+  
+  function handleBulkTransfer() {
+    setShowTransferWizard(true)
+  }
+  
+  function handleTransferSuccess() {
+    setSelectedItems([])
+    loadEvidence()
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -151,12 +177,26 @@ export default function DashboardV2() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Actions Bar */}
         <div className="mb-6 flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Evidence Items
-          </h2>
-          <Button onClick={() => setShowTransferWizard(true)} className="w-full sm:w-auto">
-            Register/Transfer Items
-          </Button>
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              Evidence Items
+            </h2>
+            {selectedItems.length > 0 && (
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                {selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''} selected
+              </p>
+            )}
+          </div>
+          <div className="flex gap-2 w-full sm:w-auto">
+            {selectedItems.length > 0 && (
+              <Button onClick={handleBulkTransfer} variant="default" className="flex-1 sm:flex-none">
+                Transfer Selected ({selectedItems.length})
+              </Button>
+            )}
+            <Button onClick={() => setShowTransferWizard(true)} variant={selectedItems.length > 0 ? "outline" : "default"} className="flex-1 sm:flex-none">
+              Register/Transfer Items
+            </Button>
+          </div>
         </div>
 
         {/* Search and Filters */}
@@ -252,6 +292,14 @@ export default function DashboardV2() {
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr>
+                  <th className="px-4 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={items.length > 0 && selectedItems.length === items.length}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 rounded border-gray-300"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Case #
                   </th>
@@ -281,19 +329,27 @@ export default function DashboardV2() {
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={9} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                       Loading evidence items...
                     </td>
                   </tr>
                 ) : items.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={9} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                       No evidence items found. Add your first item to get started.
                     </td>
                   </tr>
                 ) : (
                   items.map(item => (
                     <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={selectedItems.includes(item.id)}
+                          onChange={() => toggleSelectItem(item.id)}
+                          className="w-4 h-4 rounded border-gray-300"
+                        />
+                      </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                         {item.case_number}
                       </td>
@@ -340,7 +396,8 @@ export default function DashboardV2() {
       <TransferWizard
         open={showTransferWizard}
         onOpenChange={setShowTransferWizard}
-        onSuccess={loadEvidence}
+        onSuccess={handleTransferSuccess}
+        preSelectedItems={selectedItems}
       />
     </div>
   )
