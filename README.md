@@ -2,7 +2,7 @@
 
 ⚖️ **Digital Evidence Property Management System**
 
-A full-stack web application for managing digital evidence in forensic investigations. Built with Next.js, TypeScript, and SQLite.
+A full-stack web application for managing digital evidence in forensic investigations. Built with Next.js, TypeScript, and Neon Postgres.
 
 ## 🚀 Live Demo
 
@@ -26,52 +26,79 @@ A full-stack web application for managing digital evidence in forensic investiga
 - ✅ Chain of custody documentation
 - ✅ Notes and additional details
 
+### User Interface
+- ✅ shadcn/ui component library
+- ✅ Dark/Light mode toggle
+- ✅ Responsive design with Tailwind CSS
+- ✅ Professional grayscale theme
+- ✅ Clean, modern interface
+- ✅ Table view with status badges
+- ✅ Inline evidence creation form
+- ✅ Mobile-friendly layout
+
 ### Audit Trail
 - ✅ Automatic audit logging for all actions
 - ✅ User attribution for all evidence entries
 - ✅ Timestamp tracking
 
-### User Interface
-- ✅ Responsive design with Tailwind CSS
-- ✅ Clean, professional interface
-- ✅ Table view with status badges
-- ✅ Inline evidence creation form
-- ✅ Mobile-friendly layout
-
 ## 🛠️ Tech Stack
 
 - **Framework**: Next.js 16 (App Router)
 - **Language**: TypeScript
-- **Database**: SQLite (better-sqlite3)
+- **Database**: Neon Postgres (serverless)
 - **Authentication**: JWT + bcryptjs
-- **Styling**: Tailwind CSS
+- **UI Components**: shadcn/ui
+- **Styling**: Tailwind CSS v4
+- **Icons**: Lucide React
+- **Theme**: next-themes
 - **Deployment**: Vercel
 
-## 📦 Installation
+## 📦 Quick Start
 
 ### Prerequisites
 - Node.js 18+ 
 - npm or yarn
+- Neon Postgres account (free tier available)
 
-### Setup
+### 1. Clone the repository
 
 ```bash
-# Clone the repository
 git clone https://github.com/scott-andrew-reid/evidence-property-manager.git
 cd evidence-property-manager
+```
 
-# Install dependencies
+### 2. Install dependencies
+
+```bash
 npm install
+```
 
-# Create environment file
+### 3. Set up Neon Postgres
+
+1. Create a free account at [console.neon.tech](https://console.neon.tech)
+2. Create a new project
+3. Copy the connection string
+
+### 4. Configure environment variables
+
+```bash
 cp .env.example .env.local
-# Edit .env.local and set your JWT_SECRET
+```
 
-# Run development server
+Edit `.env.local`:
+
+```env
+JWT_SECRET=your-super-secret-jwt-key-change-this
+DATABASE_URL=postgresql://user:password@ep-xxxxx.region.aws.neon.tech/dbname?sslmode=require
+```
+
+### 5. Run development server
+
+```bash
 npm run dev
 ```
 
-Visit `http://localhost:3000` to access the application.
+Visit `http://localhost:3000`
 
 ## 🔐 Default Credentials
 
@@ -83,73 +110,55 @@ Visit `http://localhost:3000` to access the application.
 ## 📝 Database Schema
 
 ### Users Table
-- `id`: Primary key
-- `username`: Unique username
-- `password_hash`: Bcrypt hashed password
-- `full_name`: User's full name
-- `role`: User role (admin/user)
-- `created_at`: Registration timestamp
+- `id`: SERIAL PRIMARY KEY
+- `username`: TEXT UNIQUE NOT NULL
+- `password_hash`: TEXT NOT NULL
+- `full_name`: TEXT NOT NULL
+- `role`: TEXT NOT NULL DEFAULT 'user'
+- `created_at`: TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 
 ### Evidence Items Table
-- `id`: Primary key
-- `case_number`: Case reference number
-- `item_number`: Evidence item number
-- `description`: Item description
-- `collected_date`: Collection date
-- `collected_by`: Collector name
-- `location`: Storage location
-- `chain_of_custody`: Chain of custody details
-- `status`: Current status
-- `notes`: Additional notes
-- `created_by`: User ID of creator
-- `created_at`: Creation timestamp
-- `updated_at`: Last update timestamp
+- `id`: SERIAL PRIMARY KEY
+- `case_number`: TEXT NOT NULL
+- `item_number`: TEXT NOT NULL
+- `description`: TEXT NOT NULL
+- `collected_date`: DATE NOT NULL
+- `collected_by`: TEXT NOT NULL
+- `location`: TEXT
+- `chain_of_custody`: TEXT
+- `status`: TEXT DEFAULT 'stored'
+- `notes`: TEXT
+- `created_by`: INTEGER (FK to users)
+- `created_at`: TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+- `updated_at`: TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 
 ### Audit Log Table
-- `id`: Primary key
-- `user_id`: User performing action
-- `action`: Action type
-- `table_name`: Affected table
-- `record_id`: Affected record
-- `details`: Action details (JSON)
-- `timestamp`: Action timestamp
+- `id`: SERIAL PRIMARY KEY
+- `user_id`: INTEGER (FK to users)
+- `action`: TEXT NOT NULL
+- `table_name`: TEXT NOT NULL
+- `record_id`: INTEGER
+- `details`: TEXT
+- `timestamp`: TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 
 ## 🚀 Deployment
 
-### Vercel (Current)
+### Deploy to Vercel
+
+1. Push your code to GitHub
+2. Import the project in Vercel
+3. Add environment variables:
+   - `JWT_SECRET`
+   - `DATABASE_URL` (from Neon)
+4. Deploy!
+
+The database will automatically initialize on first request.
+
+### Vercel CLI
 
 ```bash
 npm run build
 vercel --prod
-```
-
-### ⚠️ Important Notes for Production
-
-**SQLite Limitation on Vercel:**
-- SQLite works locally but **NOT in Vercel's serverless environment**
-- Database resets on each deployment
-- For production, migrate to:
-  - **Neon** (recommended - serverless Postgres)
-  - **PlanetScale** (MySQL)
-  - **Supabase** (PostgreSQL)
-  - **MongoDB Atlas**
-
-**Migration Path:**
-1. Choose a cloud database provider
-2. Update `lib/db/schema.ts` with cloud database client
-3. Migrate schema and seed data
-4. Update environment variables
-5. Redeploy
-
-## 🔧 Configuration
-
-### Environment Variables
-
-Create `.env.local`:
-
-```env
-JWT_SECRET=your-super-secret-jwt-key-change-this
-DATABASE_URL=your-database-connection-string-here
 ```
 
 ## 📱 API Endpoints
@@ -161,17 +170,34 @@ DATABASE_URL=your-database-connection-string-here
 ### Evidence Management
 - `GET /api/evidence` - List all evidence items
 - `POST /api/evidence` - Create new evidence item
-- `PUT /api/evidence/:id` - Update evidence item (TODO)
-- `DELETE /api/evidence/:id` - Delete evidence item (TODO)
 
 ## 🔒 Security Features
 
 - ✅ JWT authentication with HTTP-only cookies
 - ✅ Password hashing with bcrypt (10 rounds)
 - ✅ Protected API routes
-- ✅ SQL injection prevention (prepared statements)
+- ✅ SQL injection prevention (parameterized queries)
 - ✅ XSS protection (React auto-escaping)
 - ✅ CSRF protection (SameSite cookies)
+- ✅ Secure database connections (SSL)
+
+## 🎨 UI Components
+
+Built with shadcn/ui:
+- Button
+- Input
+- Label
+- Card
+- Textarea
+- Select
+- Theme Toggle
+
+## 🌓 Theme Support
+
+- Light mode (default)
+- Dark mode
+- System preference detection
+- Persistent theme selection
 
 ## 🚧 Roadmap
 
@@ -185,8 +211,8 @@ DATABASE_URL=your-database-connection-string-here
 - [ ] Advanced audit trail viewer
 - [ ] Email notifications
 - [ ] Barcode/QR code generation
-- [ ] Cloud database migration
-- [ ] Docker support
+- [ ] Batch operations
+- [ ] Advanced reporting
 
 ## 📄 License
 

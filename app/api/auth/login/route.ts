@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import db from '@/lib/db/schema';
+import { getDb } from '@/lib/db/schema';
 import { compareSync } from 'bcryptjs';
 import { sign } from 'jsonwebtoken';
 
@@ -8,8 +8,10 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
 export async function POST(request: NextRequest) {
   try {
     const { username, password } = await request.json();
+    const sql = getDb();
 
-    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username) as any;
+    const users = await sql`SELECT * FROM users WHERE username = ${username}`;
+    const user = users[0];
 
     if (!user || !compareSync(password, user.password_hash)) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
@@ -39,6 +41,7 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
+    console.error('Login error:', error);
     return NextResponse.json({ error: 'Login failed' }, { status: 500 });
   }
 }
