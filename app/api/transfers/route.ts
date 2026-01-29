@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db/schema';
 import { getAuthUser } from '@/lib/auth';
+import { generateBatchItemNumbers, TYPE_ABBREVIATIONS } from '@/lib/item-numbering';
 
 // POST - Create transfer (handles both new and existing evidence)
 export async function POST(request: NextRequest) {
@@ -19,7 +20,38 @@ export async function POST(request: NextRequest) {
 
     // Handle NEW evidence items
     if (item_mode === 'new' && new_items && new_items.length > 0) {
-      for (const newItem of new_items) {
+      // First, get all existing items to determine next item numbers
+      const existingItems = await sql`
+        SELECT item_number FROM evidence_items_v2
+      `;
+      
+      // Get item type names for the new items
+      const typeIds = new_items.map((item: any) => item.item_type_id);
+      const itemTypes = await sql`
+        SELECT id, name FROM item_types WHERE id = ANY(${typeIds})
+      `;
+      
+      // Map type IDs to names
+      const typeMap = Object.fromEntries(
+        itemTypes.map((t: any) => [t.id, t.name])
+      );
+      
+      // Generate item numbers for all items in this batch
+      const itemsWithTypeNames = new_items.map((item: any) => ({
+        case_number: item.case_number,
+        item_type_name: typeMap[item.item_type_id] || 'Other'
+      }));
+      
+      const generatedItemNumbers = generateBatchItemNumbers(
+        itemsWithTypeNames,
+        existingItems as Array<{ item_number: string }>
+      );
+      
+      // Create each evidence item with generated item number
+      for (let i = 0; i < new_items.length; i++) {
+        const newItem = new_items[i];
+        const itemNumber = generatedItemNumbers[i];
+        
         // 1. Create evidence item
         const evidenceResult = await sql`
           INSERT INTO evidence_items_v2 (
@@ -35,7 +67,7 @@ export async function POST(request: NextRequest) {
             created_by
           ) VALUES (
             ${newItem.case_number},
-            ${newItem.item_number},
+            ${itemNumber},
             ${newItem.item_type_id},
             ${newItem.description || 'New evidence item'},
             NOW(),
@@ -97,6 +129,7 @@ export async function POST(request: NextRequest) {
 
         transferResults.push({
           evidence_id: evidenceId,
+          item_number: itemNumber,
           receipt_number: receiptNumber,
           type: 'new'
         });
