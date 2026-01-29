@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { SignatureCapture } from '@/components/SignatureCapture'
+import { generateTransferReceipt } from '@/lib/pdf-receipt'
 
 interface TransferWizardProps {
   open: boolean
@@ -61,6 +63,8 @@ interface TransferReason {
 export function TransferWizard({ open, onOpenChange, onSuccess }: TransferWizardProps) {
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
+  const [pdfUrl, setPdfUrl] = useState<string>('')
+  const [transferResult, setTransferResult] = useState<any>(null)
   
   // Step 1: Item Selection
   const [itemMode, setItemMode] = useState<'new' | 'existing'>('new')
@@ -203,7 +207,9 @@ export function TransferWizard({ open, onOpenChange, onSuccess }: TransferWizard
   function canProceedFromStep2() {
     return transferDetails.reason_id && 
            transferDetails.to_party_id &&
-           transferDetails.to_location_id
+           transferDetails.to_location_id &&
+           transferDetails.from_signature &&
+           transferDetails.to_signature
   }
 
   // Submit transfer
@@ -236,6 +242,50 @@ export function TransferWizard({ open, onOpenChange, onSuccess }: TransferWizard
       }
 
       const result = await response.json()
+      setTransferResult(result)
+      
+      // Generate PDF receipt
+      const toAnalyst = analysts.find(a => a.id === parseInt(transferDetails.to_party_id))
+      const toLocation = locations.find(l => l.id === parseInt(transferDetails.to_location_id))
+      const reason = transferReasons.find(r => r.id === parseInt(transferDetails.reason_id))
+      
+      const receiptData = {
+        receipt_number: result.transfers[0]?.receipt_number || 'N/A',
+        transfer_date: new Date().toLocaleString(),
+        transfer_type: itemMode === 'new' ? 'Initial Receipt' : 'Internal Transfer',
+        transfer_reason: reason?.reason || 'N/A',
+        items: itemMode === 'new' 
+          ? newItems.map((item, idx) => ({
+              case_number: item.case_number,
+              item_number: result.transfers[idx]?.item_number || '(pending)',
+              item_type: item.item_type_name,
+              description: item.description
+            }))
+          : existingItems.map(item => ({
+              case_number: item.case_number,
+              item_number: item.item_number,
+              item_type: item.item_type_name,
+              description: item.description
+            })),
+        from_party: {
+          type: itemMode === 'new' ? 'external' : 'analyst',
+          name: itemMode === 'new' 
+            ? (transferDetails.from_party_name || 'External source')
+            : existingItems[0]?.current_custodian_name || 'N/A',
+          location: itemMode === 'new' ? undefined : existingItems[0]?.current_location_name
+        },
+        to_party: {
+          type: 'analyst',
+          name: toAnalyst?.full_name || 'N/A',
+          location: toLocation?.name || 'N/A'
+        },
+        notes: transferDetails.notes,
+        from_signature: transferDetails.from_signature,
+        to_signature: transferDetails.to_signature
+      }
+      
+      const pdf = await generateTransferReceipt(receiptData)
+      setPdfUrl(pdf)
       
       // Success - show receipt (Step 3)
       setStep(3)
@@ -519,11 +569,28 @@ export function TransferWizard({ open, onOpenChange, onSuccess }: TransferWizard
               />
             </div>
 
-            {/* Signatures Placeholder */}
-            <div className="border-t pt-4 space-y-2">
-              <h4 className="font-medium">Signatures</h4>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Signature capture will be added in next phase. For now, transfers will be created without signatures.
+            {/* Signatures */}
+            <div className="border-t pt-4 space-y-4">
+              <h4 className="font-medium text-lg">Signatures Required</h4>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* From Signature */}
+                <SignatureCapture
+                  label={itemMode === 'new' ? 'Released By (External)' : 'Released By (Current Custodian)'}
+                  value={transferDetails.from_signature}
+                  onSave={(dataUrl) => setTransferDetails(prev => ({ ...prev, from_signature: dataUrl }))}
+                />
+                
+                {/* To Signature */}
+                <SignatureCapture
+                  label="Received By (New Custodian)"
+                  value={transferDetails.to_signature}
+                  onSave={(dataUrl) => setTransferDetails(prev => ({ ...prev, to_signature: dataUrl }))}
+                />
+              </div>
+              
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Both signatures are required for chain of custody compliance
               </p>
             </div>
           </div>
@@ -541,9 +608,46 @@ export function TransferWizard({ open, onOpenChange, onSuccess }: TransferWizard
                   : `${existingItems.length} evidence item(s) transferred`
                 }
               </p>
-              <p className="text-sm text-gray-500 mt-2">
-                PDF receipt generation will be added in next phase
-              </p>
+              
+              {transferResult && (
+                <div className="mt-4 p-4 bg-gray-100 dark:bg-gray-800 rounded text-left text-sm">
+                  <h4 className="font-medium mb-2">Transfer Details:</h4>
+                  <ul className="space-y-1 text-gray-700 dark:text-gray-300">
+                    {transferResult.transfers.map((t: any, idx: number) => (
+                      <li key={idx}>
+                        Receipt #{t.receipt_number}
+                        {t.item_number && ` - Item: ${t.item_number}`}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {pdfUrl && (
+                <div className="mt-6 flex gap-3 justify-center">
+                  <Button
+                    onClick={() => {
+                      const link = document.createElement('a')
+                      link.href = pdfUrl
+                      link.download = `Transfer_Receipt_${transferResult?.transfers[0]?.receipt_number || 'N/A'}.pdf`
+                      link.click()
+                    }}
+                  >
+                    Download Receipt (PDF)
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const win = window.open()
+                      if (win) {
+                        win.document.write('<iframe width="100%" height="100%" src="' + pdfUrl + '"></iframe>')
+                      }
+                    }}
+                  >
+                    View Receipt
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         )}
