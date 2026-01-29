@@ -50,6 +50,24 @@ interface Photo {
   uploaded_at: string
 }
 
+interface HistoryEntry {
+  id: number
+  receipt_number: string
+  transfer_date: string
+  transfer_type: string
+  transfer_reason: string
+  from_party_type: string
+  from_party_name: string
+  from_location_name: string
+  to_party_type: string
+  to_party_name: string
+  to_location_name: string
+  notes: string | null
+  from_signature: string | null
+  to_signature: string | null
+  created_by_name: string
+}
+
 export function EvidenceDetailsModal({ open, onOpenChange, itemId }: EvidenceDetailsModalProps) {
   const [loading, setLoading] = useState(false)
   const [item, setItem] = useState<EvidenceItem | null>(null)
@@ -57,6 +75,7 @@ export function EvidenceDetailsModal({ open, onOpenChange, itemId }: EvidenceDet
   const [newNote, setNewNote] = useState('')
   const [photos, setPhotos] = useState<Photo[]>([])
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [history, setHistory] = useState<HistoryEntry[]>([])
   const [activeTab, setActiveTab] = useState<'details' | 'notes' | 'photos' | 'history'>('details')
   
   useEffect(() => {
@@ -82,6 +101,13 @@ export function EvidenceDetailsModal({ open, onOpenChange, itemId }: EvidenceDet
       if (photosResponse.ok) {
         const photosData = await photosResponse.json()
         setPhotos(photosData.photos || [])
+      }
+      
+      // Load history
+      const historyResponse = await fetch(`/api/evidence-v2/${itemId}/history`)
+      if (historyResponse.ok) {
+        const historyData = await historyResponse.json()
+        setHistory(historyData.history || [])
       }
     } catch (error) {
       console.error('Failed to load evidence details:', error)
@@ -490,8 +516,113 @@ export function EvidenceDetailsModal({ open, onOpenChange, itemId }: EvidenceDet
               
               {/* History Tab */}
               {activeTab === 'history' && (
-                <div className="text-sm text-gray-500 text-center py-8">
-                  Chain of custody history will be displayed here
+                <div className="space-y-4">
+                  {history.length === 0 ? (
+                    <div className="text-sm text-gray-500 text-center py-8">
+                      No transfer history yet. This item has not been transferred.
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      {/* Timeline line */}
+                      <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-700" />
+                      
+                      {/* Timeline entries */}
+                      <div className="space-y-6">
+                        {history.map((entry, index) => (
+                          <div key={entry.id} className="relative flex gap-4">
+                            {/* Timeline dot */}
+                            <div className="relative z-10">
+                              <div className={`w-4 h-4 rounded-full mt-1 ${
+                                index === 0 
+                                  ? 'bg-blue-500' 
+                                  : 'bg-gray-400 dark:bg-gray-600'
+                              }`} />
+                            </div>
+                            
+                            {/* Entry content */}
+                            <div className="flex-1 bg-gray-50 dark:bg-gray-800 rounded-lg p-4 ml-4">
+                              <div className="flex justify-between items-start mb-3">
+                                <div>
+                                  <h4 className="font-semibold text-gray-900 dark:text-white">
+                                    {entry.transfer_type}
+                                  </h4>
+                                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                                    {new Date(entry.transfer_date).toLocaleString()}
+                                  </p>
+                                </div>
+                                <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                  {entry.receipt_number}
+                                </span>
+                              </div>
+                              
+                              <div className="grid grid-cols-2 gap-4 text-sm mb-3">
+                                <div>
+                                  <Label className="text-xs">From</Label>
+                                  <p className="font-medium">{entry.from_party_name}</p>
+                                  {entry.from_location_name && (
+                                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                                      {entry.from_location_name}
+                                    </p>
+                                  )}
+                                </div>
+                                <div>
+                                  <Label className="text-xs">To</Label>
+                                  <p className="font-medium">{entry.to_party_name}</p>
+                                  {entry.to_location_name && (
+                                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                                      {entry.to_location_name}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              <div className="text-sm mb-3">
+                                <Label className="text-xs">Reason</Label>
+                                <p>{entry.transfer_reason}</p>
+                              </div>
+                              
+                              {entry.notes && (
+                                <div className="text-sm mb-3">
+                                  <Label className="text-xs">Notes</Label>
+                                  <p className="text-gray-700 dark:text-gray-300">{entry.notes}</p>
+                                </div>
+                              )}
+                              
+                              {/* Signatures */}
+                              {(entry.from_signature || entry.to_signature) && (
+                                <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t">
+                                  {entry.from_signature && (
+                                    <div>
+                                      <Label className="text-xs">Released By</Label>
+                                      <img
+                                        src={entry.from_signature}
+                                        alt="From signature"
+                                        className="h-16 border rounded bg-white"
+                                      />
+                                    </div>
+                                  )}
+                                  {entry.to_signature && (
+                                    <div>
+                                      <Label className="text-xs">Received By</Label>
+                                      <img
+                                        src={entry.to_signature}
+                                        alt="To signature"
+                                        className="h-16 border rounded bg-white"
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              
+                              <p className="text-xs text-gray-500 mt-3">
+                                Recorded by {entry.created_by_name}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
