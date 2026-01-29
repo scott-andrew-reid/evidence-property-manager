@@ -42,11 +42,21 @@ interface Note {
   created_at: string
 }
 
+interface Photo {
+  id: number
+  photo_data: string
+  caption: string | null
+  uploaded_by_name: string
+  uploaded_at: string
+}
+
 export function EvidenceDetailsModal({ open, onOpenChange, itemId }: EvidenceDetailsModalProps) {
   const [loading, setLoading] = useState(false)
   const [item, setItem] = useState<EvidenceItem | null>(null)
   const [notes, setNotes] = useState<Note[]>([])
   const [newNote, setNewNote] = useState('')
+  const [photos, setPhotos] = useState<Photo[]>([])
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [activeTab, setActiveTab] = useState<'details' | 'notes' | 'photos' | 'history'>('details')
   
   useEffect(() => {
@@ -66,6 +76,13 @@ export function EvidenceDetailsModal({ open, onOpenChange, itemId }: EvidenceDet
       const data = await response.json()
       setItem(data.item)
       setNotes(data.notes || [])
+      
+      // Load photos
+      const photosResponse = await fetch(`/api/evidence-v2/${itemId}/photos`)
+      if (photosResponse.ok) {
+        const photosData = await photosResponse.json()
+        setPhotos(photosData.photos || [])
+      }
     } catch (error) {
       console.error('Failed to load evidence details:', error)
     } finally {
@@ -88,6 +105,94 @@ export function EvidenceDetailsModal({ open, onOpenChange, itemId }: EvidenceDet
       const data = await response.json()
       setNotes(prev => [data.note, ...prev])
       setNewNote('')
+    } catch (error: any) {
+      alert(error.message)
+    }
+  }
+  
+  async function handlePhotoUpload(file: File) {
+    if (!itemId) return
+    
+    setUploadingPhoto(true)
+    try {
+      // Convert to base64
+      const reader = new FileReader()
+      reader.onloadend = async () => {
+        const base64 = reader.result as string
+        
+        const response = await fetch(`/api/evidence-v2/${itemId}/photos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ photo_data: base64, caption: file.name })
+        })
+        
+        if (!response.ok) throw new Error('Failed to upload photo')
+        
+        const data = await response.json()
+        setPhotos(prev => [data.photo, ...prev])
+      }
+      reader.readAsDataURL(file)
+    } catch (error: any) {
+      alert(error.message)
+    } finally {
+      setUploadingPhoto(false)
+    }
+  }
+  
+  async function handleCapturePhoto() {
+    if (!itemId) return
+    
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      const video = document.createElement('video')
+      video.srcObject = stream
+      video.play()
+      
+      // Wait for video to be ready
+      await new Promise(resolve => video.onloadedmetadata = resolve)
+      
+      // Capture frame
+      const canvas = document.createElement('canvas')
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      canvas.getContext('2d')?.drawImage(video, 0, 0)
+      
+      // Stop stream
+      stream.getTracks().forEach(track => track.stop())
+      
+      // Get data URL
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
+      
+      // Upload
+      setUploadingPhoto(true)
+      const response = await fetch(`/api/evidence-v2/${itemId}/photos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ photo_data: dataUrl, caption: 'Captured photo' })
+      })
+      
+      if (!response.ok) throw new Error('Failed to upload photo')
+      
+      const data = await response.json()
+      setPhotos(prev => [data.photo, ...prev])
+    } catch (error: any) {
+      alert(error.message)
+    } finally {
+      setUploadingPhoto(false)
+    }
+  }
+  
+  async function handleDeletePhoto(photoId: number) {
+    if (!confirm('Delete this photo?')) return
+    
+    try {
+      const response = await fetch(`/api/evidence-v2/${itemId}/photos?photoId=${photoId}`, {
+        method: 'DELETE'
+      })
+      
+      if (!response.ok) throw new Error('Failed to delete photo')
+      
+      setPhotos(prev => prev.filter(p => p.id !== photoId))
     } catch (error: any) {
       alert(error.message)
     }
@@ -140,7 +245,7 @@ export function EvidenceDetailsModal({ open, onOpenChange, itemId }: EvidenceDet
                     : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
                 }`}
               >
-                Photos ({item.images?.length || 0})
+                Photos ({photos.length})
               </button>
               <button
                 onClick={() => setActiveTab('history')}
@@ -316,18 +421,70 @@ export function EvidenceDetailsModal({ open, onOpenChange, itemId }: EvidenceDet
               {/* Photos Tab */}
               {activeTab === 'photos' && (
                 <div className="space-y-4">
-                  <div>
-                    <Button variant="outline">
-                      Upload Photo
-                    </Button>
-                    <Button variant="outline" className="ml-2">
+                  <div className="flex gap-2">
+                    <label htmlFor="photo-upload">
+                      <Button variant="outline" asChild disabled={uploadingPhoto}>
+                        <span>
+                          {uploadingPhoto ? 'Uploading...' : 'Upload Photo'}
+                        </span>
+                      </Button>
+                    </label>
+                    <input
+                      id="photo-upload"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) handlePhotoUpload(file)
+                      }}
+                    />
+                    <Button variant="outline" onClick={handleCapturePhoto} disabled={uploadingPhoto}>
                       Capture Photo
                     </Button>
                   </div>
                   
-                  <div className="text-sm text-gray-500 text-center py-8">
-                    Photo upload and capture will be available soon
-                  </div>
+                  {photos.length === 0 ? (
+                    <div className="text-sm text-gray-500 text-center py-8">
+                      No photos yet. Upload or capture a photo to get started.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      {photos.map(photo => (
+                        <div key={photo.id} className="relative group">
+                          <img
+                            src={photo.photo_data}
+                            alt={photo.caption || 'Evidence photo'}
+                            className="w-full h-48 object-cover rounded border"
+                          />
+                          <div className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity rounded flex flex-col items-center justify-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => window.open(photo.photo_data)}
+                            >
+                              View Full
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeletePhoto(photo.id)}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                          {photo.caption && (
+                            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 truncate">
+                              {photo.caption}
+                            </p>
+                          )}
+                          <p className="text-xs text-gray-500 mt-1">
+                            {photo.uploaded_by_name} • {new Date(photo.uploaded_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
               
