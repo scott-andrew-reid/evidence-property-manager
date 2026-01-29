@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { AddUserModal } from '@/components/modals/AddUserModal'
+import { EditUserModal } from '@/components/modals/EditUserModal'
+import { LookupModal } from '@/components/modals/LookupModal'
 
 type AdminSection = 'users' | 'item-types' | 'locations' | 'analysts' | 'transfer-reasons'
 
@@ -34,8 +35,13 @@ export default function AdminPage() {
   const [users, setUsers] = useState<User[]>([])
   const [lookups, setLookups] = useState<Lookup[]>([])
   const [loading, setLoading] = useState(false)
-  const [showAddModal, setShowAddModal] = useState(false)
-  const [editingId, setEditingId] = useState<number | null>(null)
+  const [showAddUserModal, setShowAddUserModal] = useState(false)
+  const [showEditUserModal, setShowEditUserModal] = useState(false)
+  const [editingUserId, setEditingUserId] = useState<number | null>(null)
+  const [showLookupModal, setShowLookupModal] = useState(false)
+  const [lookupModalMode, setLookupModalMode] = useState<'add' | 'edit'>('add')
+  const [editingLookupId, setEditingLookupId] = useState<number | null>(null)
+  const [editingLookupData, setEditingLookupData] = useState<any>(null)
 
   useEffect(() => {
     loadData()
@@ -60,20 +66,61 @@ export default function AdminPage() {
     }
   }
 
-  async function handleDelete(id: number) {
-    if (!confirm('Are you sure you want to delete this item?')) return
+  async function handleDeleteUser(id: number) {
+    if (!confirm('Are you sure you want to delete this user? This cannot be undone.')) return
 
     try {
-      const endpoint = activeSection === 'users' 
-        ? `/api/admin/users/${id}`
-        : `/api/admin/lookups/${activeSection}/${id}`
-      
-      const res = await fetch(endpoint, { method: 'DELETE' })
-      if (!res.ok) throw new Error('Delete failed')
+      const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Delete failed')
+      }
       
       await loadData()
     } catch (error: any) {
       alert(error.message)
+    }
+  }
+  
+  async function handleDeleteLookup(id: number) {
+    if (!confirm('Are you sure you want to delete this item? This cannot be undone.')) return
+
+    try {
+      const res = await fetch(`/api/admin/lookups/${activeSection}/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Delete failed')
+      }
+      
+      await loadData()
+    } catch (error: any) {
+      alert(error.message)
+    }
+  }
+  
+  function handleEditUser(id: number) {
+    setEditingUserId(id)
+    setShowEditUserModal(true)
+  }
+  
+  function handleEditLookup(id: number) {
+    const item = lookups.find(l => l.id === id)
+    if (item) {
+      setEditingLookupId(id)
+      setEditingLookupData(item)
+      setLookupModalMode('edit')
+      setShowLookupModal(true)
+    }
+  }
+  
+  function handleAddClick() {
+    if (activeSection === 'users') {
+      setShowAddUserModal(true)
+    } else {
+      setLookupModalMode('add')
+      setEditingLookupId(null)
+      setEditingLookupData(null)
+      setShowLookupModal(true)
     }
   }
 
@@ -176,7 +223,7 @@ export default function AdminPage() {
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white capitalize">
                   {activeSection.replace('-', ' ')}
                 </h2>
-                <Button onClick={() => setShowAddModal(true)}>
+                <Button onClick={handleAddClick}>
                   Add New
                 </Button>
               </div>
@@ -186,13 +233,13 @@ export default function AdminPage() {
                 {loading ? (
                   <p className="text-center text-gray-500 py-8">Loading...</p>
                 ) : activeSection === 'users' ? (
-                  <UsersTable users={users} onDelete={handleDelete} onEdit={setEditingId} />
+                  <UsersTable users={users} onDelete={handleDeleteUser} onEdit={handleEditUser} />
                 ) : (
                   <LookupsTable 
                     lookups={lookups} 
                     type={activeSection}
-                    onDelete={handleDelete} 
-                    onEdit={setEditingId} 
+                    onDelete={handleDeleteLookup} 
+                    onEdit={handleEditLookup} 
                   />
                 )}
               </div>
@@ -200,6 +247,31 @@ export default function AdminPage() {
           </div>
         </div>
       </div>
+      
+      {/* Modals */}
+      <AddUserModal
+        open={showAddUserModal}
+        onOpenChange={setShowAddUserModal}
+        onSuccess={loadData}
+      />
+      
+      <EditUserModal
+        open={showEditUserModal}
+        onOpenChange={setShowEditUserModal}
+        onSuccess={loadData}
+        userId={editingUserId}
+        users={users}
+      />
+      
+      <LookupModal
+        open={showLookupModal}
+        onOpenChange={setShowLookupModal}
+        onSuccess={loadData}
+        type={activeSection as any}
+        mode={lookupModalMode}
+        editId={editingLookupId}
+        editData={editingLookupData}
+      />
     </div>
   )
 }
