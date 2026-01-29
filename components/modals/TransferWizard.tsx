@@ -1,0 +1,596 @@
+"use client"
+
+import { useState, useEffect } from 'react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+
+interface TransferWizardProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSuccess: () => void
+}
+
+interface NewEvidenceItem {
+  temp_id: string
+  case_number: string
+  item_number: string
+  item_type_id: number
+  item_type_name: string
+  description?: string
+}
+
+interface ExistingEvidenceItem {
+  id: number
+  case_number: string
+  item_number: string
+  description: string
+  item_type_name: string
+  current_status: string
+  current_location_name: string
+  current_custodian_name: string
+}
+
+interface ItemType {
+  id: number
+  name: string
+  category: string
+}
+
+interface Location {
+  id: number
+  name: string
+  location_type: string
+}
+
+interface Analyst {
+  id: number
+  full_name: string
+  badge_number: string
+}
+
+interface TransferReason {
+  id: number
+  reason: string
+  reason_type: string
+  requires_approval: boolean
+}
+
+export function TransferWizard({ open, onOpenChange, onSuccess }: TransferWizardProps) {
+  const [step, setStep] = useState(1)
+  const [loading, setLoading] = useState(false)
+  
+  // Step 1: Item Selection
+  const [itemMode, setItemMode] = useState<'new' | 'existing'>('new')
+  const [newItems, setNewItems] = useState<NewEvidenceItem[]>([])
+  const [existingItems, setExistingItems] = useState<ExistingEvidenceItem[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<ExistingEvidenceItem[]>([])
+  
+  // New item form
+  const [newItemForm, setNewItemForm] = useState({
+    case_number: '',
+    item_number: '',
+    item_type_id: '',
+    description: ''
+  })
+  
+  // Step 2: Transfer Details
+  const [transferDetails, setTransferDetails] = useState({
+    reason_id: '',
+    from_party_type: 'external' as 'external' | 'analyst' | 'location',
+    from_party_id: '',
+    from_party_name: '',
+    from_location_id: '',
+    to_party_type: 'analyst' as 'external' | 'analyst' | 'location',
+    to_party_id: '',
+    to_party_name: '',
+    to_location_id: '',
+    notes: '',
+    from_signature: '',
+    to_signature: ''
+  })
+  
+  // Lookups
+  const [itemTypes, setItemTypes] = useState<ItemType[]>([])
+  const [locations, setLocations] = useState<Location[]>([])
+  const [analysts, setAnalysts] = useState<Analyst[]>([])
+  const [transferReasons, setTransferReasons] = useState<TransferReason[]>([])
+
+  // Load lookups on mount
+  useEffect(() => {
+    if (open) {
+      loadLookups()
+      // Reset wizard
+      setStep(1)
+      setItemMode('new')
+      setNewItems([])
+      setExistingItems([])
+      setSearchQuery('')
+      setSearchResults([])
+      setNewItemForm({ case_number: '', item_number: '', item_type_id: '', description: '' })
+    }
+  }, [open])
+
+  async function loadLookups() {
+    try {
+      const [typesRes, locsRes, analystsRes, reasonsRes] = await Promise.all([
+        fetch('/api/lookups/item-types'),
+        fetch('/api/lookups/locations'),
+        fetch('/api/lookups/analysts'),
+        fetch('/api/lookups/transfer-reasons')
+      ])
+      
+      const typesData = await typesRes.json()
+      const locsData = await locsRes.json()
+      const analystsData = await analystsRes.json()
+      const reasonsData = await reasonsRes.json()
+      
+      setItemTypes(typesData.itemTypes || [])
+      setLocations(locsData.locations || [])
+      setAnalysts(analystsData.analysts || [])
+      setTransferReasons(reasonsData.reasons || [])
+    } catch (error) {
+      console.error('Failed to load lookups:', error)
+    }
+  }
+
+  // Step 1: Add new item to list
+  function addNewItem() {
+    if (!newItemForm.case_number || !newItemForm.item_number || !newItemForm.item_type_id) {
+      alert('Case #, Item #, and Type are required')
+      return
+    }
+    
+    const itemType = itemTypes.find(t => t.id === parseInt(newItemForm.item_type_id))
+    if (!itemType) return
+    
+    const newItem: NewEvidenceItem = {
+      temp_id: `temp-${Date.now()}`,
+      case_number: newItemForm.case_number,
+      item_number: newItemForm.item_number,
+      item_type_id: parseInt(newItemForm.item_type_id),
+      item_type_name: itemType.name,
+      description: newItemForm.description
+    }
+    
+    setNewItems(prev => [...prev, newItem])
+    setNewItemForm({ case_number: '', item_number: '', item_type_id: '', description: '' })
+  }
+
+  function removeNewItem(tempId: string) {
+    setNewItems(prev => prev.filter(item => item.temp_id !== tempId))
+  }
+
+  // Step 1: Search existing items
+  async function searchExisting() {
+    if (!searchQuery.trim()) return
+    
+    try {
+      const response = await fetch(`/api/evidence-v2?search=${encodeURIComponent(searchQuery)}`)
+      if (!response.ok) throw new Error('Search failed')
+      
+      const data = await response.json()
+      setSearchResults(data.items || [])
+    } catch (error) {
+      console.error('Search failed:', error)
+    }
+  }
+
+  function addExistingItem(item: ExistingEvidenceItem) {
+    if (existingItems.find(i => i.id === item.id)) {
+      alert('Item already added')
+      return
+    }
+    setExistingItems(prev => [...prev, item])
+  }
+
+  function removeExistingItem(id: number) {
+    setExistingItems(prev => prev.filter(item => item.id !== id))
+  }
+
+  // Step navigation
+  function canProceedFromStep1() {
+    if (itemMode === 'new') {
+      return newItems.length > 0
+    } else {
+      return existingItems.length > 0
+    }
+  }
+
+  function canProceedFromStep2() {
+    return transferDetails.reason_id && 
+           transferDetails.to_party_id &&
+           transferDetails.to_location_id
+  }
+
+  // Submit transfer
+  async function handleSubmit() {
+    setLoading(true)
+    
+    try {
+      // Create transfer(s)
+      const response = await fetch('/api/transfers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          item_mode: itemMode,
+          new_items: newItems,
+          existing_items: existingItems.map(i => i.id),
+          transfer_details: {
+            ...transferDetails,
+            reason_id: parseInt(transferDetails.reason_id),
+            from_party_id: transferDetails.from_party_id ? parseInt(transferDetails.from_party_id) : null,
+            from_location_id: transferDetails.from_location_id ? parseInt(transferDetails.from_location_id) : null,
+            to_party_id: parseInt(transferDetails.to_party_id),
+            to_location_id: parseInt(transferDetails.to_location_id)
+          }
+        })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Transfer failed')
+      }
+
+      const result = await response.json()
+      
+      // Success - show receipt (Step 3)
+      setStep(3)
+    } catch (error: any) {
+      alert(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            Transfer Wizard - Step {step} of 3
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Step 1: Item Selection */}
+        {step === 1 && (
+          <div className="space-y-6">
+            {/* Mode Selection */}
+            <div>
+              <Label>Transfer Type</Label>
+              <div className="flex gap-4 mt-2">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    checked={itemMode === 'new'}
+                    onChange={() => setItemMode('new')}
+                    className="w-4 h-4"
+                  />
+                  <span>New Evidence (Initial Receipt)</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    checked={itemMode === 'existing'}
+                    onChange={() => setItemMode('existing')}
+                    className="w-4 h-4"
+                  />
+                  <span>Transfer Existing Evidence</span>
+                </label>
+              </div>
+            </div>
+
+            {/* New Evidence Mode */}
+            {itemMode === 'new' && (
+              <div className="space-y-4 border-t pt-4">
+                <h3 className="font-semibold">Add New Evidence Items</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div>
+                    <Label htmlFor="new_case">Case #*</Label>
+                    <Input
+                      id="new_case"
+                      value={newItemForm.case_number}
+                      onChange={e => setNewItemForm(prev => ({ ...prev, case_number: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="new_item">Item #*</Label>
+                    <Input
+                      id="new_item"
+                      value={newItemForm.item_number}
+                      onChange={e => setNewItemForm(prev => ({ ...prev, item_number: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="new_type">Type*</Label>
+                    <select
+                      id="new_type"
+                      value={newItemForm.item_type_id}
+                      onChange={e => setNewItemForm(prev => ({ ...prev, item_type_id: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-md dark:bg-gray-700"
+                    >
+                      <option value="">Select...</option>
+                      {itemTypes.map(type => (
+                        <option key={type.id} value={type.id}>{type.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-end">
+                    <Button type="button" onClick={addNewItem} className="w-full">
+                      Add to List
+                    </Button>
+                  </div>
+                </div>
+                
+                <div>
+                  <Label htmlFor="new_desc">Brief Description (optional)</Label>
+                  <Input
+                    id="new_desc"
+                    value={newItemForm.description}
+                    onChange={e => setNewItemForm(prev => ({ ...prev, description: e.target.value }))}
+                    placeholder="Quick description..."
+                  />
+                </div>
+
+                {/* New Items List */}
+                {newItems.length > 0 && (
+                  <div className="border rounded p-3 space-y-2">
+                    <h4 className="font-medium text-sm">Items to Transfer ({newItems.length})</h4>
+                    {newItems.map(item => (
+                      <div key={item.temp_id} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-800 rounded">
+                        <div className="text-sm">
+                          <span className="font-medium">{item.case_number} / {item.item_number}</span>
+                          {' - '}
+                          <span className="text-gray-600 dark:text-gray-400">{item.item_type_name}</span>
+                          {item.description && <span className="text-gray-500"> - {item.description}</span>}
+                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => removeNewItem(item.temp_id)}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Existing Evidence Mode */}
+            {itemMode === 'existing' && (
+              <div className="space-y-4 border-t pt-4">
+                <h3 className="font-semibold">Search Existing Evidence</h3>
+                
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Search case, item, description..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    onKeyPress={e => e.key === 'Enter' && searchExisting()}
+                  />
+                  <Button onClick={searchExisting}>Search</Button>
+                </div>
+
+                {/* Search Results */}
+                {searchResults.length > 0 && (
+                  <div className="border rounded p-3 space-y-2 max-h-60 overflow-y-auto">
+                    <h4 className="font-medium text-sm">Search Results</h4>
+                    {searchResults.map(item => (
+                      <div key={item.id} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-800 rounded">
+                        <div className="text-sm flex-1">
+                          <span className="font-medium">{item.case_number} / {item.item_number}</span>
+                          {' - '}
+                          <span className="text-gray-600 dark:text-gray-400">{item.item_type_name}</span>
+                          <div className="text-xs text-gray-500">{item.description}</div>
+                        </div>
+                        <Button 
+                          variant="outline"
+                          size="sm" 
+                          onClick={() => addExistingItem(item)}
+                        >
+                          Add
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Selected Items List */}
+                {existingItems.length > 0 && (
+                  <div className="border rounded p-3 space-y-2">
+                    <h4 className="font-medium text-sm">Items to Transfer ({existingItems.length})</h4>
+                    {existingItems.map(item => (
+                      <div key={item.id} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-800 rounded">
+                        <div className="text-sm">
+                          <span className="font-medium">{item.case_number} / {item.item_number}</span>
+                          {' - '}
+                          <span className="text-gray-600 dark:text-gray-400">{item.item_type_name}</span>
+                        </div>
+                        <Button 
+                          variant="ghost"
+                          size="sm" 
+                          onClick={() => removeExistingItem(item.id)}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Step 2: Transfer Details */}
+        {step === 2 && (
+          <div className="space-y-4">
+            <h3 className="font-semibold">Transfer Details</h3>
+            
+            {/* Transfer Reason */}
+            <div>
+              <Label htmlFor="reason">Transfer Reason*</Label>
+              <select
+                id="reason"
+                value={transferDetails.reason_id}
+                onChange={e => setTransferDetails(prev => ({ ...prev, reason_id: e.target.value }))}
+                className="w-full px-3 py-2 border rounded-md dark:bg-gray-700"
+                required
+              >
+                <option value="">Select reason...</option>
+                {transferReasons
+                  .filter(r => itemMode === 'new' ? r.reason_type === 'Receipt' : r.reason_type === 'Transfer')
+                  .map(reason => (
+                    <option key={reason.id} value={reason.id}>
+                      {reason.reason} {reason.requires_approval && '(Requires Approval)'}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* From Party */}
+              <div className="space-y-2">
+                <Label>From</Label>
+                {itemMode === 'new' ? (
+                  <Input
+                    placeholder="External source / Crime scene"
+                    value={transferDetails.from_party_name}
+                    onChange={e => setTransferDetails(prev => ({ ...prev, from_party_name: e.target.value }))}
+                  />
+                ) : (
+                  <div className="text-sm p-2 bg-gray-100 dark:bg-gray-800 rounded">
+                    Current custodian (auto-filled)
+                  </div>
+                )}
+              </div>
+
+              {/* To Party */}
+              <div className="space-y-2">
+                <Label htmlFor="to_party">To Custodian*</Label>
+                <select
+                  id="to_party"
+                  value={transferDetails.to_party_id}
+                  onChange={e => setTransferDetails(prev => ({ ...prev, to_party_id: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-md dark:bg-gray-700"
+                  required
+                >
+                  <option value="">Select custodian...</option>
+                  {analysts.map(analyst => (
+                    <option key={analyst.id} value={analyst.id}>
+                      {analyst.full_name} ({analyst.badge_number})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* To Location */}
+              <div className="md:col-span-2">
+                <Label htmlFor="to_location">To Location*</Label>
+                <select
+                  id="to_location"
+                  value={transferDetails.to_location_id}
+                  onChange={e => setTransferDetails(prev => ({ ...prev, to_location_id: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-md dark:bg-gray-700"
+                  required
+                >
+                  <option value="">Select location...</option>
+                  {locations.map(loc => (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.name} ({loc.location_type})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <Label htmlFor="notes">Notes</Label>
+              <Textarea
+                id="notes"
+                value={transferDetails.notes}
+                onChange={e => setTransferDetails(prev => ({ ...prev, notes: e.target.value }))}
+                rows={3}
+                placeholder="Additional transfer notes..."
+              />
+            </div>
+
+            {/* Signatures Placeholder */}
+            <div className="border-t pt-4 space-y-2">
+              <h4 className="font-medium">Signatures</h4>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Signature capture will be added in next phase. For now, transfers will be created without signatures.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Confirmation */}
+        {step === 3 && (
+          <div className="space-y-4">
+            <div className="text-center p-6">
+              <div className="text-green-600 dark:text-green-400 text-6xl mb-4">✓</div>
+              <h3 className="text-xl font-semibold mb-2">Transfer Complete</h3>
+              <p className="text-gray-600 dark:text-gray-400">
+                {itemMode === 'new' 
+                  ? `${newItems.length} new evidence item(s) received and transferred`
+                  : `${existingItems.length} evidence item(s) transferred`
+                }
+              </p>
+              <p className="text-sm text-gray-500 mt-2">
+                PDF receipt generation will be added in next phase
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Footer Navigation */}
+        <DialogFooter>
+          {step === 1 && (
+            <>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => setStep(2)}
+                disabled={!canProceedFromStep1()}
+              >
+                Next: Transfer Details
+              </Button>
+            </>
+          )}
+          
+          {step === 2 && (
+            <>
+              <Button variant="outline" onClick={() => setStep(1)}>
+                Back
+              </Button>
+              <Button 
+                onClick={handleSubmit}
+                disabled={!canProceedFromStep2() || loading}
+              >
+                {loading ? 'Processing...' : 'Submit Transfer'}
+              </Button>
+            </>
+          )}
+          
+          {step === 3 && (
+            <Button onClick={() => {
+              onSuccess()
+              onOpenChange(false)
+            }}>
+              Done
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}

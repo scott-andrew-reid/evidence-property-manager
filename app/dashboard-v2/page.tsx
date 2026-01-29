@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { AddEvidenceModal } from '@/components/modals/AddEvidenceModal'
+import { TransferWizard } from '@/components/modals/TransferWizard'
 
 interface EvidenceItem {
   id: number
@@ -39,7 +39,7 @@ export default function DashboardV2() {
   const router = useRouter()
   const [items, setItems] = useState<EvidenceItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [showAddModal, setShowAddModal] = useState(false)
+  const [showTransferWizard, setShowTransferWizard] = useState(false)
   
   // Filter state
   const [searchQuery, setSearchQuery] = useState('')
@@ -154,8 +154,8 @@ export default function DashboardV2() {
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
             Evidence Items
           </h2>
-          <Button onClick={() => setShowAddModal(true)} className="w-full sm:w-auto">
-            + Add Evidence
+          <Button onClick={() => setShowTransferWizard(true)} className="w-full sm:w-auto">
+            + New Transfer
           </Button>
         </div>
 
@@ -336,10 +336,10 @@ export default function DashboardV2() {
         </div>
       </main>
 
-      {/* Add Evidence Modal */}
-      <AddEvidenceModal
-        open={showAddModal}
-        onOpenChange={setShowAddModal}
+      {/* Transfer Wizard */}
+      <TransferWizard
+        open={showTransferWizard}
+        onOpenChange={setShowTransferWizard}
         onSuccess={loadEvidence}
       />
     </div>
