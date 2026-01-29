@@ -173,6 +173,9 @@ export default function DashboardV2() {
             </div>
             <div className="flex items-center gap-3">
               <ThemeToggle />
+              <Button variant="outline" onClick={() => router.push('/admin')}>
+                Admin
+              </Button>
               <Button variant="outline" onClick={handleLogout}>
                 Logout
               </Button>
