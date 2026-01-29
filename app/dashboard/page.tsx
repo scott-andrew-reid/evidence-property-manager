@@ -6,6 +6,7 @@ import { ThemeToggle } from '@/components/theme-toggle'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { TransferWizard } from '@/components/modals/TransferWizard'
+import { EvidenceDetailsModal } from '@/components/modals/EvidenceDetailsModal'
 
 interface EvidenceItem {
   id: number
@@ -41,6 +42,8 @@ export default function DashboardV2() {
   const [loading, setLoading] = useState(true)
   const [showTransferWizard, setShowTransferWizard] = useState(false)
   const [selectedItems, setSelectedItems] = useState<number[]>([])
+  const [showDetailsModal, setShowDetailsModal] = useState(false)
+  const [viewingItemId, setViewingItemId] = useState<number | null>(null)
   
   // Filter state
   const [searchQuery, setSearchQuery] = useState('')
@@ -147,6 +150,11 @@ export default function DashboardV2() {
   function handleTransferSuccess() {
     setSelectedItems([])
     loadEvidence()
+  }
+  
+  function handleViewItem(id: number) {
+    setViewingItemId(id)
+    setShowDetailsModal(true)
   }
 
   return (
@@ -379,7 +387,7 @@ export default function DashboardV2() {
                         {item.current_custodian_name || 'N/A'}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm">
-                        <Button variant="outline" size="sm">
+                        <Button variant="outline" size="sm" onClick={() => handleViewItem(item.id)}>
                           View
                         </Button>
                       </td>
@@ -398,6 +406,13 @@ export default function DashboardV2() {
         onOpenChange={setShowTransferWizard}
         onSuccess={handleTransferSuccess}
         preSelectedItems={selectedItems}
+      />
+      
+      {/* Evidence Details Modal */}
+      <EvidenceDetailsModal
+        open={showDetailsModal}
+        onOpenChange={setShowDetailsModal}
+        itemId={viewingItemId}
       />
     </div>
   )
