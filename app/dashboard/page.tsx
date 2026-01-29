@@ -1,329 +1,347 @@
-'use client';
+"use client"
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select } from '@/components/ui/select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ThemeToggle } from '@/components/theme-toggle';
-import { Plus, LogOut, Scale } from 'lucide-react';
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { ThemeToggle } from '@/components/theme-toggle'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { TransferWizard } from '@/components/modals/TransferWizard'
 
 interface EvidenceItem {
-  id: number;
-  case_number: string;
-  item_number: string;
-  description: string;
-  collected_date: string;
-  collected_by: string;
-  location?: string;
-  status: string;
-  notes?: string;
-  created_by_name?: string;
-  created_at: string;
+  id: number
+  case_number: string
+  item_number: string
+  description: string
+  item_type_name: string
+  current_status: string
+  current_location_name: string
+  current_custodian_name: string
+  collected_date: string
+  created_at: string
 }
 
-export default function DashboardPage() {
-  const [items, setItems] = useState<EvidenceItem[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const router = useRouter();
+interface ItemType {
+  id: number
+  name: string
+}
 
-  const [formData, setFormData] = useState({
-    case_number: '',
-    item_number: '',
-    description: '',
-    collected_date: new Date().toISOString().split('T')[0],
-    collected_by: '',
-    location: '',
-    status: 'stored',
-    notes: '',
-  });
+interface Location {
+  id: number
+  name: string
+}
 
+interface Analyst {
+  id: number
+  full_name: string
+}
+
+export default function DashboardV2() {
+  const router = useRouter()
+  const [items, setItems] = useState<EvidenceItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showTransferWizard, setShowTransferWizard] = useState(false)
+  
+  // Filter state
+  const [searchQuery, setSearchQuery] = useState('')
+  const [filterCase, setFilterCase] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
+  const [filterLocation, setFilterLocation] = useState('')
+  const [filterType, setFilterType] = useState('')
+  
+  // Lookups for filters
+  const [itemTypes, setItemTypes] = useState<ItemType[]>([])
+  const [locations, setLocations] = useState<Location[]>([])
+  const [statuses] = useState(['stored', 'in_analysis', 'in_court', 'disposed', 'destroyed'])
+  
+  // Load lookups
   useEffect(() => {
-    fetchItems();
-  }, []);
+    loadLookups()
+  }, [])
+  
+  // Load evidence on mount and when filters change
+  useEffect(() => {
+    loadEvidence()
+  }, [searchQuery, filterCase, filterStatus, filterLocation, filterType])
 
-  const fetchItems = async () => {
+  async function loadLookups() {
     try {
-      const res = await fetch('/api/evidence');
-      if (res.status === 401) {
-        router.push('/');
-        return;
-      }
-      const data = await res.json();
-      setItems(data.items || []);
-    } catch (err) {
-      console.error('Failed to fetch items:', err);
-    } finally {
-      setLoading(false);
+      const [typesRes, locsRes] = await Promise.all([
+        fetch('/api/lookups/item-types'),
+        fetch('/api/lookups/locations')
+      ])
+      
+      const typesData = await typesRes.json()
+      const locsData = await locsRes.json()
+      
+      setItemTypes(typesData.itemTypes || [])
+      setLocations(locsData.locations || [])
+    } catch (error) {
+      console.error('Failed to load lookups:', error)
     }
-  };
+  }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    
+  async function loadEvidence() {
     try {
-      const res = await fetch('/api/evidence', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-
-      if (res.ok) {
-        setShowForm(false);
-        setFormData({
-          case_number: '',
-          item_number: '',
-          description: '',
-          collected_date: new Date().toISOString().split('T')[0],
-          collected_by: '',
-          location: '',
-          status: 'stored',
-          notes: '',
-        });
-        await fetchItems();
-      } else {
-        const errorData = await res.json();
-        console.error('Error creating evidence:', errorData);
-        alert('Failed to create evidence item: ' + (errorData.error || 'Unknown error'));
+      setLoading(true)
+      
+      // Build query params
+      const params = new URLSearchParams()
+      if (searchQuery) params.append('search', searchQuery)
+      if (filterCase) params.append('case', filterCase)
+      if (filterStatus) params.append('status', filterStatus)
+      if (filterLocation) params.append('location', filterLocation)
+      if (filterType) params.append('type', filterType)
+      
+      const response = await fetch(`/api/evidence-v2?${params.toString()}`)
+      if (!response.ok) {
+        if (response.status === 401) {
+          router.push('/')
+          return
+        }
+        throw new Error('Failed to fetch evidence')
       }
-    } catch (err) {
-      console.error('Failed to create item:', err);
-      alert('Connection error while creating evidence item');
+      
+      const data = await response.json()
+      setItems(data.items || [])
+    } catch (error) {
+      console.error('Error loading evidence:', error)
     } finally {
-      setSubmitting(false);
+      setLoading(false)
     }
-  };
+  }
 
-  const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    router.push('/');
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Loading...</div>
-      </div>
-    );
+  async function handleLogout() {
+    await fetch('/api/auth/logout', { method: 'POST' })
+    router.push('/')
+  }
+  
+  function clearFilters() {
+    setSearchQuery('')
+    setFilterCase('')
+    setFilterStatus('')
+    setFilterLocation('')
+    setFilterType('')
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <Scale className="h-8 w-8" />
+      <header className="bg-white dark:bg-gray-800 shadow">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <h1 className="text-2xl font-bold">Evidence Property Manager</h1>
-              <p className="text-sm text-muted-foreground">Digital Evidence Management System</p>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                Evidence Property Manager
+              </h1>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Chain of Custody System v2.0
+              </p>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <Button onClick={handleLogout} variant="destructive" size="sm">
-              <LogOut className="mr-2 h-4 w-4" />
-              Logout
-            </Button>
+            <div className="flex items-center gap-3">
+              <ThemeToggle />
+              <Button variant="outline" onClick={handleLogout}>
+                Logout
+              </Button>
+            </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-8 max-w-7xl">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Actions Bar */}
-        <div className="mb-6 flex justify-between items-center">
-          <div>
-            <h2 className="text-2xl font-semibold">Evidence Items</h2>
-            <p className="text-muted-foreground">{items.length} item{items.length !== 1 ? 's' : ''} total</p>
-          </div>
-          <Button
-            onClick={() => setShowForm(!showForm)}
-            variant={showForm ? "outline" : "default"}
-          >
-            {showForm ? 'Cancel' : (
-              <>
-                <Plus className="mr-2 h-4 w-4" />
-                Add New Item
-              </>
-            )}
+        <div className="mb-6 flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+            Evidence Items
+          </h2>
+          <Button onClick={() => setShowTransferWizard(true)} className="w-full sm:w-auto">
+            Register/Transfer Items
           </Button>
         </div>
 
-        {/* Add Form */}
-        {showForm && (
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle>Add New Evidence Item</CardTitle>
-              <CardDescription>Enter the details of the evidence item to add to the system</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="case_number">Case Number *</Label>
-                    <Input
-                      id="case_number"
-                      type="text"
-                      value={formData.case_number}
-                      onChange={(e) => setFormData({ ...formData, case_number: e.target.value })}
-                      placeholder="e.g., 2024-12345"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="item_number">Item Number *</Label>
-                    <Input
-                      id="item_number"
-                      type="text"
-                      value={formData.item_number}
-                      onChange={(e) => setFormData({ ...formData, item_number: e.target.value })}
-                      placeholder="e.g., ITEM-001"
-                      required
-                    />
-                  </div>
-                </div>
+        {/* Search and Filters */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+            {/* Search */}
+            <div className="xl:col-span-2">
+              <Input
+                type="search"
+                placeholder="Search case, item, description..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
+            </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description *</Label>
-                  <Textarea
-                    id="description"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Detailed description of the evidence item"
-                    rows={3}
-                    required
-                  />
-                </div>
+            {/* Case Filter */}
+            <div>
+              <Input
+                type="text"
+                placeholder="Filter by case..."
+                value={filterCase}
+                onChange={e => setFilterCase(e.target.value)}
+              />
+            </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="collected_date">Collected Date *</Label>
-                    <Input
-                      id="collected_date"
-                      type="date"
-                      value={formData.collected_date}
-                      onChange={(e) => setFormData({ ...formData, collected_date: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="collected_by">Collected By *</Label>
-                    <Input
-                      id="collected_by"
-                      type="text"
-                      value={formData.collected_by}
-                      onChange={(e) => setFormData({ ...formData, collected_by: e.target.value })}
-                      placeholder="Name of collector"
-                      required
-                    />
-                  </div>
-                </div>
+            {/* Status Filter */}
+            <div>
+              <select
+                value={filterStatus}
+                onChange={e => setFilterStatus(e.target.value)}
+                className="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600"
+              >
+                <option value="">All Statuses</option>
+                {statuses.map(status => (
+                  <option key={status} value={status}>
+                    {status.replace('_', ' ').toUpperCase()}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="location">Storage Location</Label>
-                    <Input
-                      id="location"
-                      type="text"
-                      value={formData.location}
-                      onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                      placeholder="e.g., Locker 5, Shelf A"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="status">Status</Label>
-                    <Select
-                      id="status"
-                      value={formData.status}
-                      onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                    >
-                      <option value="stored">Stored</option>
-                      <option value="in-analysis">In Analysis</option>
-                      <option value="released">Released</option>
-                      <option value="destroyed">Destroyed</option>
-                    </Select>
-                  </div>
-                </div>
+            {/* Location Filter */}
+            <div>
+              <select
+                value={filterLocation}
+                onChange={e => setFilterLocation(e.target.value)}
+                className="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600"
+              >
+                <option value="">All Locations</option>
+                {locations.map(loc => (
+                  <option key={loc.id} value={loc.id}>
+                    {loc.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Notes</Label>
-                  <Textarea
-                    id="notes"
-                    value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    placeholder="Additional notes or chain of custody information"
-                    rows={2}
-                  />
-                </div>
+            {/* Type Filter */}
+            <div>
+              <select
+                value={filterType}
+                onChange={e => setFilterType(e.target.value)}
+                className="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600"
+              >
+                <option value="">All Types</option>
+                {itemTypes.map(type => (
+                  <option key={type.id} value={type.id}>
+                    {type.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          
+          {/* Clear Filters */}
+          {(searchQuery || filterCase || filterStatus || filterLocation || filterType) && (
+            <div className="mt-3">
+              <Button variant="outline" size="sm" onClick={clearFilters}>
+                Clear Filters
+              </Button>
+            </div>
+          )}
+        </div>
 
-                <Button type="submit" className="w-full" size="lg" disabled={submitting}>
-                  {submitting ? 'Adding Evidence...' : 'Add Evidence Item'}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        )}
+        {/* Results Count */}
+        <div className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+          {loading ? 'Loading...' : `${items.length} item${items.length !== 1 ? 's' : ''} found`}
+        </div>
 
-        {/* Evidence Items Table */}
-        <Card>
-          <CardContent className="p-0">
-            {items.length === 0 ? (
-              <div className="p-12 text-center text-muted-foreground">
-                <Scale className="h-16 w-16 mx-auto mb-4 opacity-20" />
-                <p className="text-lg">No evidence items found</p>
-                <p className="text-sm mt-2">Click "Add New Item" to get started</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="border-b bg-muted/50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Case #</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Item #</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Description</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Collected</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Collected By</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Location</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Status</th>
+        {/* Evidence Table */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-900">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Case #
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Item #
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden md:table-cell">
+                    Type
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Description
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden lg:table-cell">
+                    Status
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden xl:table-cell">
+                    Location
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden xl:table-cell">
+                    Custodian
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                {loading ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                      Loading evidence items...
+                    </td>
+                  </tr>
+                ) : items.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                      No evidence items found. Add your first item to get started.
+                    </td>
+                  </tr>
+                ) : (
+                  items.map(item => (
+                    <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                        {item.case_number}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                        {item.item_number}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 hidden md:table-cell">
+                        {item.item_type_name || 'N/A'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-900 dark:text-white max-w-xs truncate">
+                        {item.description}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm hidden lg:table-cell">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          item.current_status === 'stored' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                          item.current_status === 'in_analysis' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
+                          item.current_status === 'in_court' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
+                          'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
+                        }`}>
+                          {item.current_status.replace('_', ' ').toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 hidden xl:table-cell">
+                        {item.current_location_name || 'N/A'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 hidden xl:table-cell">
+                        {item.current_custodian_name || 'N/A'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                        <Button variant="outline" size="sm">
+                          View
+                        </Button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {items.map((item) => (
-                      <tr key={item.id} className="hover:bg-muted/50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{item.case_number}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{item.item_number}</td>
-                        <td className="px-6 py-4 text-sm max-w-xs truncate">{item.description}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
-                          {new Date(item.collected_date).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">{item.collected_by}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">{item.location || '-'}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            item.status === 'stored' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
-                            item.status === 'in-analysis' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                            item.status === 'released' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
-                            'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400'
-                          }`}>
-                            {item.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </main>
+
+      {/* Transfer Wizard */}
+      <TransferWizard
+        open={showTransferWizard}
+        onOpenChange={setShowTransferWizard}
+        onSuccess={loadEvidence}
+      />
     </div>
-  );
+  )
 }
