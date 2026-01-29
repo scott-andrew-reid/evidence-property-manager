@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db/schema';
 import { getAuthUser } from '@/lib/auth';
 
-// GET all active analysts
+// GET all active users (analysts)
+// Note: Using users table instead of separate analysts table
 export async function GET(request: NextRequest) {
   const user = await getAuthUser(request);
   if (!user) {
@@ -13,10 +14,14 @@ export async function GET(request: NextRequest) {
     const sql = getDb();
     const analysts = await sql`
       SELECT 
-        id, badge_number, full_name, email, department, role,
-        can_receive, can_issue, active
-      FROM analysts
-      WHERE active = true
+        id, 
+        username as badge_number, 
+        full_name, 
+        email, 
+        role,
+        COALESCE(is_active, true) as active
+      FROM users
+      WHERE COALESCE(is_active, true) = true
       ORDER BY full_name
     `;
 

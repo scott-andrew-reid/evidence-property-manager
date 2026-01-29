@@ -20,10 +20,20 @@ export async function initializeDatabase() {
       username TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       full_name TEXT NOT NULL,
+      email TEXT,
       role TEXT NOT NULL DEFAULT 'user',
+      is_active BOOLEAN DEFAULT true,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `;
+
+  // Migration: Add email and is_active columns if they don't exist
+  try {
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true`;
+  } catch (error) {
+    console.log('Column migration skipped (columns may already exist)');
+  }
 
   // Create evidence_items table
   await sql`
