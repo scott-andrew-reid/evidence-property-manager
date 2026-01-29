@@ -2,6 +2,11 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -24,6 +29,7 @@ export default function LoginPage() {
 
       if (res.ok) {
         router.push('/dashboard');
+        router.refresh();
       } else {
         const data = await res.json();
         setError(data.error || 'Login failed');
@@ -36,62 +42,67 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-2xl p-8 w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="text-4xl mb-4">⚖️</div>
-          <h1 className="text-3xl font-bold text-gray-800">Evidence Property Manager</h1>
-          <p className="text-gray-600 mt-2">Digital Evidence Management System</p>
-        </div>
-
-        <form onSubmit={handleLogin} className="space-y-6">
-          <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
-              Username
-            </label>
-            <input
-              id="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              required
-            />
-          </div>
-
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              required
-            />
-          </div>
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-              {error}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50"
-          >
-            {loading ? 'Logging in...' : 'Login'}
-          </button>
-        </form>
-
-        <div className="mt-6 text-center text-sm text-gray-600">
-          <p>Default credentials: admin / admin123</p>
-        </div>
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-gray-100 to-slate-200 dark:from-slate-950 dark:via-gray-900 dark:to-slate-800">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
       </div>
+      
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center space-y-4">
+          <div className="text-6xl mx-auto">⚖️</div>
+          <CardTitle className="text-3xl">Evidence Property Manager</CardTitle>
+          <CardDescription>Digital Evidence Management System</CardDescription>
+        </CardHeader>
+        
+        <CardContent>
+          <form onSubmit={handleLogin} className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter your username"
+                required
+                autoComplete="username"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                required
+                autoComplete="current-password"
+              />
+            </div>
+
+            {error && (
+              <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-md text-sm">
+                {error}
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full"
+              size="lg"
+            >
+              {loading ? 'Logging in...' : 'Login'}
+            </Button>
+
+            <div className="text-center text-sm text-muted-foreground pt-2">
+              <p>Default: <code className="bg-muted px-1 py-0.5 rounded">admin</code> / <code className="bg-muted px-1 py-0.5 rounded">admin123</code></p>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }
