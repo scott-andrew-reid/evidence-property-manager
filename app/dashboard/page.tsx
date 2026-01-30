@@ -57,10 +57,10 @@ export default function DashboardV2() {
   const [locations, setLocations] = useState<Location[]>([])
   const [statuses] = useState(['stored', 'in_analysis', 'in_court', 'disposed', 'destroyed'])
   
-  // Load lookups
-  useEffect(() => {
-    loadLookups()
-  }, [])
+  // Load lookups - Disabled until Phase 2
+  // useEffect(() => {
+  //   loadLookups()
+  // }, [])
   
   // Load evidence on mount and when filters change
   useEffect(() => {
@@ -212,7 +212,7 @@ export default function DashboardV2() {
 
         {/* Search and Filters */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {/* Search */}
             <div className="xl:col-span-2">
               <Input
@@ -249,8 +249,8 @@ export default function DashboardV2() {
               </select>
             </div>
 
-            {/* Location Filter */}
-            <div>
+            {/* Location Filter - Coming in Phase 2 */}
+            {/* <div>
               <select
                 value={filterLocation}
                 onChange={e => setFilterLocation(e.target.value)}
@@ -263,10 +263,10 @@ export default function DashboardV2() {
                   </option>
                 ))}
               </select>
-            </div>
+            </div> */}
 
-            {/* Type Filter */}
-            <div>
+            {/* Type Filter - Coming in Phase 2 */}
+            {/* <div>
               <select
                 value={filterType}
                 onChange={e => setFilterType(e.target.value)}
@@ -279,7 +279,7 @@ export default function DashboardV2() {
                   </option>
                 ))}
               </select>
-            </div>
+            </div> */}
           </div>
           
           {/* Clear Filters */}
