@@ -1,8 +1,13 @@
 #!/usr/bin/env tsx
 // Phase 2 Migration Script
 // Run with: npx tsx scripts/migrate-v2.ts
+// Or: DATABASE_URL=<url> npx tsx scripts/migrate-v2.ts
 
+import { config } from 'dotenv'
 import { initializeV2Schema } from '../lib/db/schema'
+
+// Load environment variables
+config({ path: '.env.local' })
 
 async function main() {
   console.log('==================================')
