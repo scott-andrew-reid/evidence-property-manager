@@ -95,10 +95,6 @@
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
-  
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
@@ -145,7 +141,7 @@
   }
   
   .data-table tbody tr {
-    @apply border-b border-border transition-colors hover:bg-muted/50;
+    @apply border-b transition-colors hover:bg-muted/50;
   }
   
   .data-table tbody td {
