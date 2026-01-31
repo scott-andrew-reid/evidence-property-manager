@@ -6,6 +6,7 @@ import { Plus, Edit, Trash2, RefreshCw, ArrowLeft } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { DataTable } from '@/components/ui/data-table';
 import { Tabs } from '@/components/ui/tabs';
+import { APP_VERSION } from '@/lib/version';
 
 export default function AdminNew() {
   const router = useRouter();
@@ -282,7 +283,7 @@ export default function AdminNew() {
                   Admin Panel
                 </h1>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  System Configuration & Management
+                  System Configuration & Management • v{APP_VERSION}
                 </p>
               </div>
             </div>

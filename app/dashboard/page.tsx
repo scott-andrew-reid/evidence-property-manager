@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { TransferWizard } from '@/components/modals/TransferWizard'
 import { EvidenceDetailsModal } from '@/components/modals/EvidenceDetailsModal'
+import { APP_VERSION, VERSION_LABEL } from '@/lib/version'
 
 interface EvidenceItem {
   id: number
@@ -168,7 +169,7 @@ export default function DashboardV2() {
                 Evidence Property Manager
               </h1>
               <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Chain of Custody System v2.0
+                Chain of Custody System • v{APP_VERSION} ({VERSION_LABEL})
               </p>
             </div>
             <div className="flex items-center gap-3">

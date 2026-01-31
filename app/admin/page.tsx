@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { AddUserModal } from '@/components/modals/AddUserModal'
 import { EditUserModal } from '@/components/modals/EditUserModal'
+import { APP_VERSION } from '@/lib/version'
 
 interface User {
   id: number
@@ -75,7 +76,7 @@ export default function AdminPage() {
           <div className="flex justify-between items-center py-4">
             <div>
               <h1 className="text-2xl font-bold">Admin Panel</h1>
-              <p className="text-sm text-muted-foreground">User Management</p>
+              <p className="text-sm text-muted-foreground">User Management • v{APP_VERSION}</p>
             </div>
             <div className="flex gap-3">
               <Button variant="outline" onClick={() => router.push('/dashboard')}>

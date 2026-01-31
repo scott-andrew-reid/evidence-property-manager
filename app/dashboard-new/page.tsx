@@ -9,6 +9,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { AddEvidenceModal } from '@/components/add-evidence-modal';
 import { EvidenceDetailsModal } from '@/components/evidence-details-modal';
 import { TransferWizard } from '@/components/transfer-wizard';
+import { APP_VERSION, VERSION_LABEL } from '@/lib/version';
 
 export default function DashboardNew() {
   const router = useRouter();
@@ -150,7 +151,7 @@ export default function DashboardNew() {
                 Evidence Property Manager
               </h1>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Chain of Custody Tracking System
+                Chain of Custody Tracking System • v{APP_VERSION} ({VERSION_LABEL})
               </p>
             </div>
             
