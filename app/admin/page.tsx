@@ -1,222 +1,415 @@
-"use client"
+'use client';
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { AddUserModal } from '@/components/modals/AddUserModal'
-import { EditUserModal } from '@/components/modals/EditUserModal'
-import { APP_VERSION } from '@/lib/version'
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { Plus, Edit, Trash2, RefreshCw, ArrowLeft } from 'lucide-react';
+import { ThemeToggle } from '@/components/theme-toggle';
+import { DataTable } from '@/components/ui/data-table';
+import { Tabs } from '@/components/ui/tabs';
+import { APP_VERSION } from '@/lib/version';
 
-interface User {
-  id: number
-  username: string
-  full_name: string
-  email: string
-  role: string
-  is_active: boolean
-  created_at: string
-}
-
-export default function AdminPage() {
-  const router = useRouter()
-  const [users, setUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(false)
-  const [showAddUserModal, setShowAddUserModal] = useState(false)
-  const [showEditUserModal, setShowEditUserModal] = useState(false)
-  const [editingUserId, setEditingUserId] = useState<number | null>(null)
+export default function Admin() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  
+  // Users
+  const [users, setUsers] = useState<any[]>([]);
+  
+  // Lookups
+  const [itemTypes, setItemTypes] = useState<any[]>([]);
+  const [locations, setLocations] = useState<any[]>([]);
+  const [transferReasons, setTransferReasons] = useState<any[]>([]);
 
   useEffect(() => {
-    loadData()
-  }, [])
+    loadAllData();
+  }, []);
 
-  async function loadData() {
-    setLoading(true)
+  const loadAllData = async () => {
+    setLoading(true);
     try {
-      const res = await fetch('/api/admin/users')
-      const data = await res.json()
-      setUsers(data.users || [])
-    } catch (error) {
-      console.error('Failed to load data:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+      const [usersRes, typesRes, locsRes, reasonsRes] = await Promise.all([
+        fetch('/api/admin/users'),
+        fetch('/api/lookups/item-types'),
+        fetch('/api/lookups/locations'),
+        fetch('/api/lookups/transfer-reasons')
+      ]);
 
-  async function handleDeleteUser(id: number) {
-    if (!confirm('Are you sure you want to delete this user? This cannot be undone.')) return
-
-    try {
-      const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' })
-      if (!res.ok) {
-        const error = await res.json()
-        throw new Error(error.error || 'Delete failed')
+      if (usersRes.ok) {
+        const data = await usersRes.json();
+        setUsers(data.users || []);
       }
-      
-      await loadData()
-    } catch (error: any) {
-      alert(error.message)
+
+      if (typesRes.ok) {
+        const data = await typesRes.json();
+        setItemTypes(data.item_types || []);
+      }
+
+      if (locsRes.ok) {
+        const data = await locsRes.json();
+        setLocations(data.locations || []);
+      }
+
+      if (reasonsRes.ok) {
+        const data = await reasonsRes.json();
+        setTransferReasons(data.transfer_reasons || []);
+      }
+    } catch (err) {
+      console.error('Failed to load admin data:', err);
+    } finally {
+      setLoading(false);
     }
-  }
-  
-  function handleEditUser(id: number) {
-    setEditingUserId(id)
-    setShowEditUserModal(true)
-  }
+  };
 
-  function handleLogout() {
-    fetch('/api/auth/logout', { method: 'POST' })
-      .then(() => router.push('/'))
-  }
+  const handleDeleteUser = async (id: number) => {
+    if (!confirm('Delete this user?')) return;
+    
+    try {
+      const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        loadAllData();
+      }
+    } catch (err) {
+      console.error('Failed to delete user:', err);
+    }
+  };
+
+  const handleDeleteItemType = async (id: number) => {
+    if (!confirm('Delete this item type?')) return;
+    
+    try {
+      const res = await fetch(`/api/lookups/item-types/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        loadAllData();
+      } else {
+        const error = await res.json();
+        alert(error.error);
+      }
+    } catch (err) {
+      console.error('Failed to delete item type:', err);
+    }
+  };
+
+  const handleDeleteLocation = async (id: number) => {
+    if (!confirm('Delete this location?')) return;
+    
+    try {
+      const res = await fetch(`/api/lookups/locations/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        loadAllData();
+      } else {
+        const error = await res.json();
+        alert(error.error);
+      }
+    } catch (err) {
+      console.error('Failed to delete location:', err);
+    }
+  };
+
+  const handleDeleteReason = async (id: number) => {
+    if (!confirm('Delete this transfer reason?')) return;
+    
+    try {
+      const res = await fetch(`/api/lookups/transfer-reasons/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        loadAllData();
+      } else {
+        const error = await res.json();
+        alert(error.error);
+      }
+    } catch (err) {
+      console.error('Failed to delete transfer reason:', err);
+    }
+  };
+
+  const userColumns = [
+    { key: 'username', label: 'Username', sortable: true },
+    { key: 'full_name', label: 'Full Name', sortable: true },
+    { key: 'email', label: 'Email', sortable: true },
+    { key: 'role', label: 'Role', sortable: true },
+    {
+      key: 'is_active',
+      label: 'Active',
+      render: (user: any) => (
+        <span className={`px-2 py-1 rounded text-xs ${
+          user.is_active ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400'
+        }`}>
+          {user.is_active ? 'Yes' : 'No'}
+        </span>
+      )
+    },
+    {
+      key: 'actions',
+      label: 'Actions',
+      render: (user: any) => (
+        <div className="flex gap-2">
+          <button
+            onClick={(e) => { e.stopPropagation(); alert('Edit user not implemented in this demo'); }}
+            className="text-blue-600 hover:text-blue-700"
+          >
+            <Edit className="h-4 w-4" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); handleDeleteUser(user.id); }}
+            className="text-red-600 hover:text-red-700"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      )
+    }
+  ];
+
+  const itemTypeColumns = [
+    { key: 'name', label: 'Name', sortable: true },
+    { key: 'category', label: 'Category', sortable: true },
+    {
+      key: 'extended_fields',
+      label: 'Extended Fields',
+      render: (type: any) => (
+        type.extended_fields?.fields?.length || 0
+      )
+    },
+    {
+      key: 'actions',
+      label: 'Actions',
+      render: (type: any) => (
+        <div className="flex gap-2">
+          <button
+            onClick={(e) => { e.stopPropagation(); alert('Edit not implemented in this demo'); }}
+            className="text-blue-600 hover:text-blue-700"
+          >
+            <Edit className="h-4 w-4" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); handleDeleteItemType(type.id); }}
+            className="text-red-600 hover:text-red-700"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      )
+    }
+  ];
+
+  const locationColumns = [
+    { key: 'name', label: 'Name', sortable: true },
+    { key: 'building', label: 'Building', sortable: true },
+    { key: 'room', label: 'Room', sortable: true },
+    { key: 'capacity', label: 'Capacity', sortable: true },
+    { key: 'current_count', label: 'Current', sortable: true },
+    {
+      key: 'active',
+      label: 'Active',
+      render: (loc: any) => (
+        <span className={`px-2 py-1 rounded text-xs ${
+          loc.active ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400'
+        }`}>
+          {loc.active ? 'Yes' : 'No'}
+        </span>
+      )
+    },
+    {
+      key: 'actions',
+      label: 'Actions',
+      render: (loc: any) => (
+        <div className="flex gap-2">
+          <button
+            onClick={(e) => { e.stopPropagation(); alert('Edit not implemented in this demo'); }}
+            className="text-blue-600 hover:text-blue-700"
+          >
+            <Edit className="h-4 w-4" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); handleDeleteLocation(loc.id); }}
+            className="text-red-600 hover:text-red-700"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      )
+    }
+  ];
+
+  const reasonColumns = [
+    { key: 'reason', label: 'Reason', sortable: true },
+    {
+      key: 'requires_approval',
+      label: 'Requires Approval',
+      render: (reason: any) => (
+        <span className={`px-2 py-1 rounded text-xs ${
+          reason.requires_approval ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400'
+        }`}>
+          {reason.requires_approval ? 'Yes' : 'No'}
+        </span>
+      )
+    },
+    {
+      key: 'actions',
+      label: 'Actions',
+      render: (reason: any) => (
+        <div className="flex gap-2">
+          <button
+            onClick={(e) => { e.stopPropagation(); alert('Edit not implemented in this demo'); }}
+            className="text-blue-600 hover:text-blue-700"
+          >
+            <Edit className="h-4 w-4" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); handleDeleteReason(reason.id); }}
+            className="text-red-600 hover:text-red-700"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      )
+    }
+  ];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <div className="border-b bg-card">
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div>
-              <h1 className="text-2xl font-bold">Admin Panel</h1>
-              <p className="text-sm text-muted-foreground">User Management • v{APP_VERSION}</p>
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => router.push('/dashboard')}
+                className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  Admin Panel
+                </h1>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  System Configuration & Management • v{APP_VERSION}
+                </p>
+              </div>
             </div>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={() => router.push('/dashboard')}>
-                Back to Dashboard
-              </Button>
-              <Button variant="outline" onClick={handleLogout}>
-                Logout
-              </Button>
+            
+            <div className="flex items-center gap-4">
+              <button
+                onClick={loadAllData}
+                disabled={loading}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+              <ThemeToggle />
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-card rounded-lg shadow border">
-          {/* Section Header */}
-          <div className="px-6 py-4 border-b flex justify-between items-center">
-            <div>
-              <h2 className="text-lg font-semibold">Users</h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Manage system users and permissions
-              </p>
-            </div>
-            <Button onClick={() => setShowAddUserModal(true)}>
-              Add New User
-            </Button>
-          </div>
-
-          {/* Content */}
-          <div className="p-6">
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-                  <p className="text-sm text-muted-foreground">Loading users...</p>
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Tabs
+          tabs={[
+            {
+              id: 'users',
+              label: `Users (${users.length})`,
+              content: (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-lg font-semibold">User Management</h2>
+                    <button
+                      onClick={() => alert('Add user not implemented in this demo')}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add User
+                    </button>
+                  </div>
+                  <DataTable
+                    data={users}
+                    columns={userColumns}
+                    searchKeys={['username', 'full_name', 'email']}
+                    searchPlaceholder="Search users..."
+                    loading={loading}
+                  />
                 </div>
-              </div>
-            ) : users.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground">No users found</p>
-              </div>
-            ) : (
-              <UsersTable users={users} onDelete={handleDeleteUser} onEdit={handleEditUser} />
-            )}
-          </div>
-        </div>
-
-        {/* Coming Soon Notice */}
-        <div className="mt-6 bg-muted/50 rounded-lg border p-6">
-          <h3 className="text-sm font-semibold mb-2">Additional Admin Features Coming Soon</h3>
-          <p className="text-sm text-muted-foreground mb-3">
-            The following sections will be available in Phase 2 of the enhancement plan:
-          </p>
-          <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
-            <li><strong>Item Types</strong> - Manage evidence item categories (phones, hard drives, etc.)</li>
-            <li><strong>Locations</strong> - Manage storage locations</li>
-            <li><strong>Transfer Reasons</strong> - Manage standard transfer reasons</li>
-          </ul>
-          <p className="text-xs text-muted-foreground mt-3">
-            Note: Analysts are managed through the Users section above.
-          </p>
-        </div>
-      </div>
-      
-      {/* Modals */}
-      <AddUserModal
-        open={showAddUserModal}
-        onOpenChange={setShowAddUserModal}
-        onSuccess={loadData}
-      />
-      
-      <EditUserModal
-        open={showEditUserModal}
-        onOpenChange={setShowEditUserModal}
-        onSuccess={loadData}
-        userId={editingUserId}
-        users={users}
-      />
+              )
+            },
+            {
+              id: 'item-types',
+              label: `Item Types (${itemTypes.length})`,
+              content: (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-lg font-semibold">Item Type Management</h2>
+                    <button
+                      onClick={() => alert('Add item type not implemented in this demo')}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Item Type
+                    </button>
+                  </div>
+                  <DataTable
+                    data={itemTypes}
+                    columns={itemTypeColumns}
+                    searchKeys={['name', 'category']}
+                    searchPlaceholder="Search item types..."
+                    loading={loading}
+                  />
+                </div>
+              )
+            },
+            {
+              id: 'locations',
+              label: `Locations (${locations.length})`,
+              content: (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-lg font-semibold">Location Management</h2>
+                    <button
+                      onClick={() => alert('Add location not implemented in this demo')}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Location
+                    </button>
+                  </div>
+                  <DataTable
+                    data={locations}
+                    columns={locationColumns}
+                    searchKeys={['name', 'building', 'room']}
+                    searchPlaceholder="Search locations..."
+                    loading={loading}
+                  />
+                </div>
+              )
+            },
+            {
+              id: 'transfer-reasons',
+              label: `Transfer Reasons (${transferReasons.length})`,
+              content: (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-lg font-semibold">Transfer Reason Management</h2>
+                    <button
+                      onClick={() => alert('Add transfer reason not implemented in this demo')}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Reason
+                    </button>
+                  </div>
+                  <DataTable
+                    data={transferReasons}
+                    columns={reasonColumns}
+                    searchKeys={['reason']}
+                    searchPlaceholder="Search transfer reasons..."
+                    loading={loading}
+                  />
+                </div>
+              )
+            }
+          ]}
+        />
+      </main>
     </div>
-  )
-}
-
-function UsersTable({ users, onDelete, onEdit }: { users: User[], onDelete: (id: number) => void, onEdit: (id: number) => void }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-border">
-        <thead className="bg-muted/50">
-          <tr>
-            <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Username
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Full Name
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Email
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Role
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Status
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Actions
-            </th>
-          </tr>
-        </thead>
-        <tbody className="bg-card divide-y divide-border">
-          {users.map(user => (
-            <tr key={user.id} className="hover:bg-muted/50">
-              <td className="px-4 py-3 text-sm font-medium">{user.username}</td>
-              <td className="px-4 py-3 text-sm">{user.full_name}</td>
-              <td className="px-4 py-3 text-sm text-muted-foreground">{user.email || '-'}</td>
-              <td className="px-4 py-3 text-sm">
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                  {user.role}
-                </span>
-              </td>
-              <td className="px-4 py-3 text-sm">
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  user.is_active 
-                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                    : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                }`}>
-                  {user.is_active ? 'Active' : 'Inactive'}
-                </span>
-              </td>
-              <td className="px-4 py-3 text-sm space-x-2">
-                <Button variant="outline" size="sm" onClick={() => onEdit(user.id)}>
-                  Edit
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => onDelete(user.id)}>
-                  Delete
-                </Button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
+  );
 }

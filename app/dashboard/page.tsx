@@ -1,185 +1,174 @@
-"use client"
+'use client';
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { ThemeToggle } from '@/components/theme-toggle'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { TransferWizard } from '@/components/modals/TransferWizard'
-import { EvidenceDetailsModal } from '@/components/modals/EvidenceDetailsModal'
-import { APP_VERSION, VERSION_LABEL } from '@/lib/version'
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { Plus, Download, RefreshCw, Filter, FileText } from 'lucide-react';
+import { ThemeToggle } from '@/components/theme-toggle';
+import { DataTable } from '@/components/ui/data-table';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { AddEvidenceModal } from '@/components/add-evidence-modal';
+import { EvidenceDetailsModal } from '@/components/evidence-details-modal';
+import { TransferWizard } from '@/components/transfer-wizard';
+import { APP_VERSION, VERSION_LABEL } from '@/lib/version';
 
-interface EvidenceItem {
-  id: number
-  case_number: string
-  item_number: string
-  description: string
-  item_type_name: string
-  current_status: string
-  current_location_name: string
-  current_custodian_name: string
-  collected_date: string
-  created_at: string
-}
-
-interface ItemType {
-  id: number
-  name: string
-}
-
-interface Location {
-  id: number
-  name: string
-}
-
-interface Analyst {
-  id: number
-  full_name: string
-}
-
-export default function DashboardV2() {
-  const router = useRouter()
-  const [items, setItems] = useState<EvidenceItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showTransferWizard, setShowTransferWizard] = useState(false)
-  const [selectedItems, setSelectedItems] = useState<number[]>([])
-  const [showDetailsModal, setShowDetailsModal] = useState(false)
-  const [viewingItemId, setViewingItemId] = useState<number | null>(null)
+export default function Dashboard() {
+  const router = useRouter();
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
   
-  // Filter state
-  const [searchQuery, setSearchQuery] = useState('')
-  const [filterCase, setFilterCase] = useState('')
-  const [filterStatus, setFilterStatus] = useState('')
-  const [filterLocation, setFilterLocation] = useState('')
-  const [filterType, setFilterType] = useState('')
+  // Modals
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showTransferWizard, setShowTransferWizard] = useState(false);
+  const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
+  const [selectedItem, setSelectedItem] = useState<any | null>(null);
   
-  // Lookups for filters
-  const [itemTypes, setItemTypes] = useState<ItemType[]>([])
-  const [locations, setLocations] = useState<Location[]>([])
-  const [statuses] = useState(['stored', 'in_analysis', 'in_court', 'disposed', 'destroyed'])
+  // Filters
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterLocation, setFilterLocation] = useState('');
+  const [filterType, setFilterType] = useState('');
   
-  // Load lookups - Disabled until Phase 2
-  // useEffect(() => {
-  //   loadLookups()
-  // }, [])
-  
-  // Load evidence on mount and when filters change
+  // Lookups
+  const [locations, setLocations] = useState<any[]>([]);
+  const [itemTypes, setItemTypes] = useState<any[]>([]);
+
   useEffect(() => {
-    loadEvidence()
-  }, [searchQuery, filterCase, filterStatus, filterLocation, filterType])
+    loadData();
+    loadLookups();
+  }, [filterStatus, filterLocation, filterType]);
 
-  async function loadLookups() {
+  const loadData = async () => {
+    setLoading(true);
     try {
-      const [typesRes, locsRes] = await Promise.all([
-        fetch('/api/lookups/item-types'),
-        fetch('/api/lookups/locations')
-      ])
+      const params = new URLSearchParams();
+      if (filterStatus) params.append('status', filterStatus);
+      if (filterLocation) params.append('location', filterLocation);
+      if (filterType) params.append('type', filterType);
       
-      const typesData = await typesRes.json()
-      const locsData = await locsRes.json()
-      
-      setItemTypes(typesData.itemTypes || [])
-      setLocations(locsData.locations || [])
-    } catch (error) {
-      console.error('Failed to load lookups:', error)
-    }
-  }
-
-  async function loadEvidence() {
-    try {
-      setLoading(true)
-      
-      // Build query params
-      const params = new URLSearchParams()
-      if (searchQuery) params.append('search', searchQuery)
-      if (filterCase) params.append('case', filterCase)
-      if (filterStatus) params.append('status', filterStatus)
-      if (filterLocation) params.append('location', filterLocation)
-      if (filterType) params.append('type', filterType)
-      
-      const response = await fetch(`/api/evidence-v2?${params.toString()}`)
-      if (!response.ok) {
-        if (response.status === 401) {
-          router.push('/')
-          return
-        }
-        throw new Error('Failed to fetch evidence')
+      const response = await fetch(`/api/evidence-v2?${params.toString()}`);
+      if (response.ok) {
+        const data = await response.json();
+        setItems(data.items || []);
       }
-      
-      const data = await response.json()
-      setItems(data.items || [])
-    } catch (error) {
-      console.error('Error loading evidence:', error)
+    } catch (err) {
+      console.error('Failed to load evidence:', err);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
-  async function handleLogout() {
-    await fetch('/api/auth/logout', { method: 'POST' })
-    router.push('/')
-  }
-  
-  function clearFilters() {
-    setSearchQuery('')
-    setFilterCase('')
-    setFilterStatus('')
-    setFilterLocation('')
-    setFilterType('')
-  }
-  
-  function toggleSelectItem(id: number) {
-    setSelectedItems(prev => 
-      prev.includes(id) 
-        ? prev.filter(i => i !== id)
-        : [...prev, id]
-    )
-  }
-  
-  function toggleSelectAll() {
-    if (selectedItems.length === items.length) {
-      setSelectedItems([])
-    } else {
-      setSelectedItems(items.map(i => i.id))
+  const loadLookups = async () => {
+    try {
+      const [locsRes, typesRes] = await Promise.all([
+        fetch('/api/lookups/locations'),
+        fetch('/api/lookups/item-types')
+      ]);
+
+      if (locsRes.ok) {
+        const data = await locsRes.json();
+        setLocations(data.locations || []);
+      }
+
+      if (typesRes.ok) {
+        const data = await typesRes.json();
+        setItemTypes(data.item_types || []);
+      }
+    } catch (err) {
+      console.error('Failed to load lookups:', err);
     }
-  }
-  
-  function handleBulkTransfer() {
-    setShowTransferWizard(true)
-  }
-  
-  function handleTransferSuccess() {
-    setSelectedItems([])
-    loadEvidence()
-  }
-  
-  function handleViewItem(id: number) {
-    setViewingItemId(id)
-    setShowDetailsModal(true)
-  }
+  };
+
+  const handleRowClick = (item: any) => {
+    setSelectedItemId(item.id);
+    setShowDetailsModal(true);
+  };
+
+  const handleTransfer = (item: any) => {
+    setSelectedItem(item);
+    setShowTransferWizard(true);
+  };
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.push('/');
+  };
+
+  const columns = [
+    {
+      key: 'case_number',
+      label: 'Case #',
+      sortable: true,
+      width: '120px'
+    },
+    {
+      key: 'item_number',
+      label: 'Item #',
+      sortable: true,
+      width: '120px'
+    },
+    {
+      key: 'description',
+      label: 'Description',
+      sortable: true
+    },
+    {
+      key: 'item_type_name',
+      label: 'Type',
+      sortable: true,
+      width: '150px'
+    },
+    {
+      key: 'current_status',
+      label: 'Status',
+      sortable: true,
+      width: '120px',
+      render: (item: any) => <StatusBadge status={item.current_status} />
+    },
+    {
+      key: 'current_location_name',
+      label: 'Location',
+      sortable: true,
+      width: '180px',
+      render: (item: any) => item.current_location_name || '—'
+    },
+    {
+      key: 'current_custodian_name',
+      label: 'Custodian',
+      sortable: true,
+      width: '150px',
+      render: (item: any) => item.current_custodian_name || '—'
+    }
+  ];
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
             <div>
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
                 Evidence Property Manager
               </h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Chain of Custody System • v{APP_VERSION} ({VERSION_LABEL})
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Chain of Custody Tracking System • v{APP_VERSION} ({VERSION_LABEL})
               </p>
             </div>
-            <div className="flex items-center gap-3">
-              <ThemeToggle />
-              <Button variant="outline" onClick={() => router.push('/admin')}>
+            
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => router.push('/admin')}
+                className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+              >
                 Admin
-              </Button>
-              <Button variant="outline" onClick={handleLogout}>
+              </button>
+              <ThemeToggle />
+              <button
+                onClick={handleLogout}
+                className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+              >
                 Logout
-              </Button>
+              </button>
             </div>
           </div>
         </div>
@@ -188,236 +177,158 @@ export default function DashboardV2() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Actions Bar */}
-        <div className="mb-6 flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-              Evidence Items
-            </h2>
-            {selectedItems.length > 0 && (
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                {selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''} selected
-              </p>
-            )}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              Add Evidence
+            </button>
+            
+            <button
+              onClick={loadData}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
           </div>
-          <div className="flex gap-2 w-full sm:w-auto">
-            {selectedItems.length > 0 && (
-              <Button onClick={handleBulkTransfer} variant="default" className="flex-1 sm:flex-none">
-                Transfer Selected ({selectedItems.length})
-              </Button>
-            )}
-            <Button onClick={() => setShowTransferWizard(true)} variant={selectedItems.length > 0 ? "outline" : "default"} className="flex-1 sm:flex-none">
-              Register/Transfer Items
-            </Button>
+
+          <div className="flex items-center gap-3">
+            <button
+              className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+            >
+              <Download className="h-4 w-4" />
+              Export
+            </button>
+            
+            <button
+              className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+            >
+              <FileText className="h-4 w-4" />
+              Reports
+            </button>
           </div>
         </div>
 
-        {/* Search and Filters */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {/* Search */}
-            <div className="xl:col-span-2">
-              <Input
-                type="search"
-                placeholder="Search case, item, description..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-              />
+        {/* Stats Cards */}
+        <div className="grid grid-cols-4 gap-4 mb-6">
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">
+              {items.length}
             </div>
-
-            {/* Case Filter */}
-            <div>
-              <Input
-                type="text"
-                placeholder="Filter by case..."
-                value={filterCase}
-                onChange={e => setFilterCase(e.target.value)}
-              />
-            </div>
-
-            {/* Status Filter */}
-            <div>
-              <select
-                value={filterStatus}
-                onChange={e => setFilterStatus(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600"
-              >
-                <option value="">All Statuses</option>
-                {statuses.map(status => (
-                  <option key={status} value={status}>
-                    {status.replace('_', ' ').toUpperCase()}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Location Filter - Coming in Phase 2 */}
-            {/* <div>
-              <select
-                value={filterLocation}
-                onChange={e => setFilterLocation(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600"
-              >
-                <option value="">All Locations</option>
-                {locations.map(loc => (
-                  <option key={loc.id} value={loc.id}>
-                    {loc.name}
-                  </option>
-                ))}
-              </select>
-            </div> */}
-
-            {/* Type Filter - Coming in Phase 2 */}
-            {/* <div>
-              <select
-                value={filterType}
-                onChange={e => setFilterType(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600"
-              >
-                <option value="">All Types</option>
-                {itemTypes.map(type => (
-                  <option key={type.id} value={type.id}>
-                    {type.name}
-                  </option>
-                ))}
-              </select>
-            </div> */}
+            <div className="text-sm text-gray-600 dark:text-gray-400">Total Items</div>
           </div>
           
-          {/* Clear Filters */}
-          {(searchQuery || filterCase || filterStatus || filterLocation || filterType) && (
-            <div className="mt-3">
-              <Button variant="outline" size="sm" onClick={clearFilters}>
-                Clear Filters
-              </Button>
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="text-2xl font-bold text-blue-600">
+              {items.filter(i => i.current_status === 'stored').length}
             </div>
-          )}
-        </div>
-
-        {/* Results Count */}
-        <div className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-          {loading ? 'Loading...' : `${items.length} item${items.length !== 1 ? 's' : ''} found`}
-        </div>
-
-        {/* Evidence Table */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-900">
-                <tr>
-                  <th className="px-4 py-3 text-left">
-                    <input
-                      type="checkbox"
-                      checked={items.length > 0 && selectedItems.length === items.length}
-                      onChange={toggleSelectAll}
-                      className="w-4 h-4 rounded border-gray-300"
-                    />
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Case #
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Item #
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden md:table-cell">
-                    Type
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Description
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden lg:table-cell">
-                    Status
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden xl:table-cell">
-                    Location
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden xl:table-cell">
-                    Custodian
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {loading ? (
-                  <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                      Loading evidence items...
-                    </td>
-                  </tr>
-                ) : items.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                      No evidence items found. Add your first item to get started.
-                    </td>
-                  </tr>
-                ) : (
-                  items.map(item => (
-                    <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <input
-                          type="checkbox"
-                          checked={selectedItems.includes(item.id)}
-                          onChange={() => toggleSelectItem(item.id)}
-                          className="w-4 h-4 rounded border-gray-300"
-                        />
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                        {item.case_number}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                        {item.item_number}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 hidden md:table-cell">
-                        {item.item_type_name || 'N/A'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 dark:text-white max-w-xs truncate">
-                        {item.description}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm hidden lg:table-cell">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          item.current_status === 'stored' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
-                          item.current_status === 'in_analysis' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
-                          item.current_status === 'in_court' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
-                          'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
-                        }`}>
-                          {item.current_status.replace('_', ' ').toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 hidden xl:table-cell">
-                        {item.current_location_name || 'N/A'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 hidden xl:table-cell">
-                        {item.current_custodian_name || 'N/A'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
-                        <Button variant="outline" size="sm" onClick={() => handleViewItem(item.id)}>
-                          View
-                        </Button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+            <div className="text-sm text-gray-600 dark:text-gray-400">In Storage</div>
           </div>
+          
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="text-2xl font-bold text-yellow-600">
+              {items.filter(i => i.current_status === 'in_analysis').length}
+            </div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">In Analysis</div>
+          </div>
+          
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="text-2xl font-bold text-purple-600">
+              {items.filter(i => i.current_status === 'in_court').length}
+            </div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">In Court</div>
+          </div>
+        </div>
+
+        {/* Data Table */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+          <DataTable
+            data={items}
+            columns={columns}
+            searchKeys={['case_number', 'item_number', 'description']}
+            searchPlaceholder="Search by case, item, or description..."
+            onRowClick={handleRowClick}
+            loading={loading}
+            emptyMessage="No evidence items found"
+            filters={
+              <>
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 text-sm"
+                >
+                  <option value="">All Status</option>
+                  <option value="stored">Stored</option>
+                  <option value="in_analysis">In Analysis</option>
+                  <option value="in_court">In Court</option>
+                  <option value="released">Released</option>
+                  <option value="disposed">Disposed</option>
+                </select>
+
+                <select
+                  value={filterLocation}
+                  onChange={(e) => setFilterLocation(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 text-sm"
+                >
+                  <option value="">All Locations</option>
+                  {locations.filter(l => l.active).map(location => (
+                    <option key={location.id} value={location.id}>{location.name}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 text-sm"
+                >
+                  <option value="">All Types</option>
+                  {itemTypes.map(type => (
+                    <option key={type.id} value={type.id}>{type.name}</option>
+                  ))}
+                </select>
+              </>
+            }
+          />
         </div>
       </main>
 
-      {/* Transfer Wizard */}
-      <TransferWizard
-        open={showTransferWizard}
-        onOpenChange={setShowTransferWizard}
-        onSuccess={handleTransferSuccess}
-        preSelectedItems={selectedItems}
+      {/* Modals */}
+      <AddEvidenceModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSuccess={() => {
+          loadData();
+          setShowAddModal(false);
+        }}
       />
-      
-      {/* Evidence Details Modal */}
+
       <EvidenceDetailsModal
-        open={showDetailsModal}
-        onOpenChange={setShowDetailsModal}
-        itemId={viewingItemId}
+        isOpen={showDetailsModal}
+        onClose={() => {
+          setShowDetailsModal(false);
+          setSelectedItemId(null);
+        }}
+        evidenceId={selectedItemId}
+      />
+
+      <TransferWizard
+        isOpen={showTransferWizard}
+        onClose={() => {
+          setShowTransferWizard(false);
+          setSelectedItem(null);
+        }}
+        evidenceItem={selectedItem}
+        onComplete={() => {
+          loadData();
+          setShowTransferWizard(false);
+          setSelectedItem(null);
+        }}
       />
     </div>
-  )
+  );
 }
