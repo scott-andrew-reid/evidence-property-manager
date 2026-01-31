@@ -2,7 +2,54 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db/schema';
 import { getAuthUser } from '@/lib/auth';
 
-// POST new note
+// GET notes for an evidence item
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const user = await getAuthUser(request);
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    const sql = getDb();
+    const { id } = await params;
+    const evidenceId = parseInt(id);
+    
+    if (isNaN(evidenceId)) {
+      return NextResponse.json({ error: 'Invalid evidence ID' }, { status: 400 });
+    }
+    
+    // Verify evidence exists
+    const evidence = await sql`
+      SELECT id FROM evidence_items_v2 WHERE id = ${evidenceId} LIMIT 1
+    `;
+    
+    if (evidence.length === 0) {
+      return NextResponse.json({ error: 'Evidence item not found' }, { status: 404 });
+    }
+    
+    // Get notes
+    const notes = await sql`
+      SELECT 
+        n.*,
+        u.username as created_by_name,
+        u.full_name as created_by_full_name
+      FROM evidence_notes n
+      LEFT JOIN users u ON n.created_by = u.id
+      WHERE n.evidence_item_id = ${evidenceId}
+      ORDER BY n.created_at DESC
+    `;
+    
+    return NextResponse.json({ notes });
+  } catch (error: any) {
+    console.error('Failed to fetch notes:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// POST add a note to evidence item
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -15,43 +62,51 @@ export async function POST(
   try {
     const sql = getDb();
     const { id } = await params;
-    const itemId = parseInt(id);
-    const { text } = await request.json();
+    const evidenceId = parseInt(id);
+    const data = await request.json();
     
-    if (!text || !text.trim()) {
+    if (isNaN(evidenceId)) {
+      return NextResponse.json({ error: 'Invalid evidence ID' }, { status: 400 });
+    }
+    
+    if (!data.note || data.note.trim() === '') {
       return NextResponse.json({ error: 'Note text is required' }, { status: 400 });
     }
     
-    // Create notes table if it doesn't exist
-    await sql`
-      CREATE TABLE IF NOT EXISTS evidence_notes (
-        id SERIAL PRIMARY KEY,
-        evidence_item_id INTEGER NOT NULL REFERENCES evidence_items_v2(id) ON DELETE CASCADE,
-        text TEXT NOT NULL,
-        created_by INTEGER REFERENCES users(id),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
+    // Verify evidence exists
+    const evidence = await sql`
+      SELECT id FROM evidence_items_v2 WHERE id = ${evidenceId} LIMIT 1
     `;
     
-    // Insert note
+    if (evidence.length === 0) {
+      return NextResponse.json({ error: 'Evidence item not found' }, { status: 404 });
+    }
+    
+    // Create note
     const result = await sql`
-      INSERT INTO evidence_notes (evidence_item_id, text, created_by)
-      VALUES (${itemId}, ${text.trim()}, ${user.userId})
-      RETURNING *
+      INSERT INTO evidence_notes (
+        evidence_item_id,
+        note,
+        created_by
+      ) VALUES (
+        ${evidenceId},
+        ${data.note.trim()},
+        ${user.userId}
+      )
+      RETURNING id, created_at
     `;
     
-    // Get user name
-    const users = await sql`SELECT full_name FROM users WHERE id = ${user.userId}`;
-    const userName = users[0]?.full_name || 'Unknown';
+    const noteId = result[0].id;
+    const createdAt = result[0].created_at;
     
-    const note = {
-      ...result[0],
-      created_by: userName
-    };
-    
-    return NextResponse.json({ note });
+    return NextResponse.json({ 
+      success: true,
+      id: noteId,
+      created_at: createdAt,
+      message: 'Note added successfully'
+    }, { status: 201 });
   } catch (error: any) {
-    console.error('Failed to add note:', error);
+    console.error('Failed to create note:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

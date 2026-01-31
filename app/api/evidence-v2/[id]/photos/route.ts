@@ -15,30 +15,30 @@ export async function GET(
   try {
     const sql = getDb();
     const { id } = await params;
-    const itemId = parseInt(id);
+    const evidenceId = parseInt(id);
     
-    // Create table if it doesn't exist
-    await sql`
-      CREATE TABLE IF NOT EXISTS evidence_photos (
-        id SERIAL PRIMARY KEY,
-        evidence_item_id INTEGER NOT NULL REFERENCES evidence_items_v2(id) ON DELETE CASCADE,
-        photo_data TEXT NOT NULL,
-        caption TEXT,
-        uploaded_by INTEGER REFERENCES users(id),
-        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
+    if (isNaN(evidenceId)) {
+      return NextResponse.json({ error: 'Invalid evidence ID' }, { status: 400 });
+    }
+    
+    // Verify evidence exists
+    const evidence = await sql`
+      SELECT id FROM evidence_items_v2 WHERE id = ${evidenceId} LIMIT 1
     `;
     
+    if (evidence.length === 0) {
+      return NextResponse.json({ error: 'Evidence item not found' }, { status: 404 });
+    }
+    
+    // Get photos
     const photos = await sql`
       SELECT 
-        p.id,
-        p.photo_data,
-        p.caption,
-        p.uploaded_at,
-        u.full_name as uploaded_by_name
+        p.*,
+        u.username as uploaded_by_name,
+        u.full_name as uploaded_by_full_name
       FROM evidence_photos p
       LEFT JOIN users u ON p.uploaded_by = u.id
-      WHERE p.evidence_item_id = ${itemId}
+      WHERE p.evidence_item_id = ${evidenceId}
       ORDER BY p.uploaded_at DESC
     `;
     
@@ -49,7 +49,7 @@ export async function GET(
   }
 }
 
-// POST upload photo
+// POST add a photo to evidence item
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -62,76 +62,53 @@ export async function POST(
   try {
     const sql = getDb();
     const { id } = await params;
-    const itemId = parseInt(id);
-    const { photo_data, caption } = await request.json();
+    const evidenceId = parseInt(id);
+    const data = await request.json();
     
-    if (!photo_data) {
-      return NextResponse.json({ error: 'Photo data is required' }, { status: 400 });
+    if (isNaN(evidenceId)) {
+      return NextResponse.json({ error: 'Invalid evidence ID' }, { status: 400 });
     }
     
-    // Validate base64 data URL
-    if (!photo_data.startsWith('data:image/')) {
-      return NextResponse.json({ error: 'Invalid photo format' }, { status: 400 });
+    if (!data.photo_path || data.photo_path.trim() === '') {
+      return NextResponse.json({ error: 'Photo path is required' }, { status: 400 });
     }
     
-    // Create table if it doesn't exist
-    await sql`
-      CREATE TABLE IF NOT EXISTS evidence_photos (
-        id SERIAL PRIMARY KEY,
-        evidence_item_id INTEGER NOT NULL REFERENCES evidence_items_v2(id) ON DELETE CASCADE,
-        photo_data TEXT NOT NULL,
-        caption TEXT,
-        uploaded_by INTEGER REFERENCES users(id),
-        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
+    // Verify evidence exists
+    const evidence = await sql`
+      SELECT id FROM evidence_items_v2 WHERE id = ${evidenceId} LIMIT 1
     `;
     
+    if (evidence.length === 0) {
+      return NextResponse.json({ error: 'Evidence item not found' }, { status: 404 });
+    }
+    
+    // Create photo record
     const result = await sql`
-      INSERT INTO evidence_photos (evidence_item_id, photo_data, caption, uploaded_by)
-      VALUES (${itemId}, ${photo_data}, ${caption || null}, ${user.userId})
-      RETURNING *
+      INSERT INTO evidence_photos (
+        evidence_item_id,
+        photo_path,
+        caption,
+        uploaded_by
+      ) VALUES (
+        ${evidenceId},
+        ${data.photo_path.trim()},
+        ${data.caption || null},
+        ${user.userId}
+      )
+      RETURNING id, uploaded_at
     `;
     
-    // Get uploader name
-    const users = await sql`SELECT full_name FROM users WHERE id = ${user.userId}`;
-    const userName = users[0]?.full_name || 'Unknown';
+    const photoId = result[0].id;
+    const uploadedAt = result[0].uploaded_at;
     
-    const photo = {
-      ...result[0],
-      uploaded_by_name: userName
-    };
-    
-    return NextResponse.json({ photo });
+    return NextResponse.json({ 
+      success: true,
+      id: photoId,
+      uploaded_at: uploadedAt,
+      message: 'Photo added successfully'
+    }, { status: 201 });
   } catch (error: any) {
-    console.error('Failed to upload photo:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
-
-// DELETE photo
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const user = await getAuthUser(request);
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  try {
-    const sql = getDb();
-    const { searchParams } = new URL(request.url);
-    const photoId = searchParams.get('photoId');
-    
-    if (!photoId) {
-      return NextResponse.json({ error: 'Photo ID is required' }, { status: 400 });
-    }
-    
-    await sql`DELETE FROM evidence_photos WHERE id = ${parseInt(photoId)}`;
-    
-    return NextResponse.json({ success: true });
-  } catch (error: any) {
-    console.error('Failed to delete photo:', error);
+    console.error('Failed to create photo:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
