@@ -1,30 +1,18 @@
 #!/usr/bin/env tsx
 // Run Phase 2 migration against production database
-// This bypasses the API endpoint and runs directly
+// Usage: DATABASE_URL="postgresql://..." npx tsx scripts/run-migration-prod.ts
 
-import { config } from 'dotenv'
-
-// Try to load DATABASE_URL from various sources
-config({ path: '.env.local' })
-config({ path: '.env' })
-
-// Allow passing DATABASE_URL as argument
-if (process.argv[2]) {
-  process.env.DATABASE_URL = process.argv[2]
-}
+import { initializeV2Schema } from '../lib/db/schema'
 
 if (!process.env.DATABASE_URL) {
   console.error('❌ DATABASE_URL not found.')
-  console.log('\nPlease provide it as an argument:')
-  console.log('npx tsx scripts/run-migration-prod.ts "postgresql://..."')
-  console.log('\nOr set it in .env.local')
+  console.log('\nPlease set it as an environment variable:')
+  console.log('DATABASE_URL="postgresql://..." npx tsx scripts/run-migration-prod.ts')
   process.exit(1)
 }
 
 console.log('🔌 Connecting to production database...')
 console.log('📍 URL:', process.env.DATABASE_URL.substring(0, 30) + '...')
-
-import { initializeV2Schema } from '../lib/db/schema'
 
 async function main() {
   console.log('\n==================================')
