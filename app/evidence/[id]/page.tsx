@@ -1,357 +1,428 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Edit, FileText, History, Image as ImageIcon, AlertCircle } from 'lucide-react';
-
-interface EvidenceItem {
-  id: number;
-  case_number: string;
-  item_number: string;
-  description: string;
-  collected_date: string;
-  collected_by: string;
-  item_type_name?: string;
-  item_type_category?: string;
-  current_location_name?: string;
-  current_custodian_name?: string;
-  status: string;
-  chain_of_custody?: string;
-  notes?: string;
-  extended_fields?: Record<string, any>;
-  created_by_name?: string;
-  created_at: string;
-  updated_at?: string;
-}
-
-interface Note {
-  id: number;
-  note: string;
-  created_by_name: string;
-  created_at: string;
-}
+import { useState, useEffect } from 'react';
+import { useRouter, useParams } from 'next/navigation';
+import { ArrowLeft, Clock, MapPin, User, FileText, Image as ImageIcon, GitBranch, Plus, Download } from 'lucide-react';
+import { ThemeToggle } from '@/components/theme-toggle';
+import { TabsWrapper as Tabs } from '@/components/ui/tabs-wrapper';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { APP_VERSION } from '@/lib/version';
 
 export default function EvidenceDetailPage() {
-  const params = useParams();
   const router = useRouter();
-  const [item, setItem] = useState<EvidenceItem | null>(null);
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const params = useParams();
+  const evidenceId = params.id as string;
+
+  const [loading, setLoading] = useState(false);
+  const [evidence, setEvidence] = useState<any | null>(null);
+  const [transfers, setTransfers] = useState<any[]>([]);
+  const [notes, setNotes] = useState<any[]>([]);
+  const [photos, setPhotos] = useState<any[]>([]);
+  const [newNote, setNewNote] = useState('');
+  const [addingNote, setAddingNote] = useState(false);
 
   useEffect(() => {
-    if (params.id) {
-      fetchItemDetails();
+    if (evidenceId) {
+      fetchDetails();
     }
-  }, [params.id]);
+  }, [evidenceId]);
 
-  const fetchItemDetails = async () => {
+  const fetchDetails = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const response = await fetch(`/api/evidence-v2/${params.id}`);
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch evidence details');
+      const response = await fetch(`/api/evidence-v2/${evidenceId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setEvidence(data.item);
+        setTransfers(data.transfers || []);
+        setNotes(data.notes || []);
+        setPhotos(data.photos || []);
       }
-      
-      const data = await response.json();
-      setItem(data.item);
-      setNotes(data.notes || []);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      console.error('Failed to fetch evidence details:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    const variants: Record<string, string> = {
-      stored: 'bg-blue-500',
-      'in_analysis': 'bg-yellow-500',
-      released: 'bg-green-500',
-      destroyed: 'bg-red-500',
-    };
-    
-    return (
-      <Badge className={`${variants[status] || 'bg-gray-500'} text-white`}>
-        {status.replace('_', ' ').toUpperCase()}
-      </Badge>
-    );
+  const handleAddNote = async () => {
+    if (!newNote.trim()) return;
+
+    setAddingNote(true);
+    try {
+      const response = await fetch(`/api/evidence-v2/${evidenceId}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: newNote })
+      });
+
+      if (response.ok) {
+        setNewNote('');
+        fetchDetails(); // Refresh
+      }
+    } catch (err) {
+      console.error('Failed to add note:', err);
+    } finally {
+      setAddingNote(false);
+    }
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-AU', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+    return new Date(dateString).toLocaleString();
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading evidence details...</p>
-        </div>
-      </div>
-    );
-  }
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.push('/');
+  };
 
-  if (error || !item) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-destructive">
-              <AlertCircle className="h-5 w-5" />
-              Error Loading Evidence
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground mb-4">{error || 'Evidence item not found'}</p>
-            <Button onClick={() => router.push('/dashboard')} variant="outline">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Dashboard
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
+  if (!evidenceId) {
+    return <div>Invalid evidence ID</div>;
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <div className="border-b bg-card">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                size="icon"
+              <button
                 onClick={() => router.push('/dashboard')}
+                className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
               >
                 <ArrowLeft className="h-5 w-5" />
-              </Button>
+              </button>
               <div>
-                <h1 className="text-3xl font-bold">
-                  {item.case_number} - {item.item_number}
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  Evidence Details
                 </h1>
-                <p className="text-muted-foreground">{item.description}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Chain of Custody Tracking • v{APP_VERSION}
+                </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              {getStatusBadge(item.status)}
-              <Button variant="outline" size="sm">
-                <Edit className="mr-2 h-4 w-4" />
-                Edit
-              </Button>
+            
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => router.push('/admin')}
+                className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+              >
+                Admin
+              </button>
+              <ThemeToggle />
+              <button
+                onClick={handleLogout}
+                className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+              >
+                Logout
+              </button>
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
       {/* Main Content */}
-      <div className="container mx-auto px-4 py-8">
-        <Tabs defaultValue="details" className="w-full">
-          <TabsList>
-            <TabsTrigger value="details">
-              <FileText className="mr-2 h-4 w-4" />
-              Details
-            </TabsTrigger>
-            <TabsTrigger value="custody">
-              <History className="mr-2 h-4 w-4" />
-              Chain of Custody
-            </TabsTrigger>
-            <TabsTrigger value="photos">
-              <ImageIcon className="mr-2 h-4 w-4" />
-              Photos
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="details" className="space-y-6 mt-6">
-            <div className="grid gap-6 md:grid-cols-2">
-              {/* Basic Information */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Basic Information</CardTitle>
-                  <CardDescription>Core evidence details</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">Case Number</label>
-                    <p className="text-lg">{item.case_number}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">Item Number</label>
-                    <p className="text-lg">{item.item_number}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">Description</label>
-                    <p className="text-lg">{item.description}</p>
-                  </div>
-                  {item.item_type_name && (
-                    <div>
-                      <label className="text-sm font-medium text-muted-foreground">Item Type</label>
-                      <p className="text-lg">
-                        {item.item_type_name}
-                        {item.item_type_category && (
-                          <span className="text-muted-foreground"> ({item.item_type_category})</span>
-                        )}
-                      </p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Collection Details */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Collection Details</CardTitle>
-                  <CardDescription>When and where the evidence was collected</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">Collected Date</label>
-                    <p className="text-lg">{formatDate(item.collected_date)}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">Collected By</label>
-                    <p className="text-lg">{item.collected_by}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">Status</label>
-                    <div className="mt-1">{getStatusBadge(item.status)}</div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Current Location & Custody */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Current Location & Custody</CardTitle>
-                  <CardDescription>Where the evidence is now</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {item.current_location_name && (
-                    <div>
-                      <label className="text-sm font-medium text-muted-foreground">Location</label>
-                      <p className="text-lg">{item.current_location_name}</p>
-                    </div>
-                  )}
-                  {item.current_custodian_name && (
-                    <div>
-                      <label className="text-sm font-medium text-muted-foreground">Current Custodian</label>
-                      <p className="text-lg">{item.current_custodian_name}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Extended Fields (if any) */}
-              {item.extended_fields && Object.keys(item.extended_fields).length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Additional Details</CardTitle>
-                    <CardDescription>Item-specific information</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {Object.entries(item.extended_fields).map(([key, value]) => (
-                      <div key={key}>
-                        <label className="text-sm font-medium text-muted-foreground">
-                          {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                        </label>
-                        <p className="text-lg">{String(value)}</p>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              )}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {loading ? (
+          <div className="space-y-4">
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-32 w-full" />
+            <Skeleton className="h-48 w-full" />
+          </div>
+        ) : evidence ? (
+          <div className="space-y-6">
+            {/* Header Info */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold">
+                    {evidence.case_number}-{evidence.item_number}
+                  </h2>
+                  <p className="text-gray-600 dark:text-gray-400 mt-1">{evidence.description}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={evidence.current_status} />
+                  <button
+                    onClick={() => alert('Export to PDF not yet implemented')}
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    <Download className="h-4 w-4" />
+                    Export
+                  </button>
+                </div>
+              </div>
             </div>
 
-            {/* Notes Section */}
-            {item.notes && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Notes</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="whitespace-pre-wrap">{item.notes}</p>
-                </CardContent>
-              </Card>
-            )}
+            {/* Tabs */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+              <Tabs
+                tabs={[
+                  {
+                    id: 'details',
+                    label: 'Details',
+                    content: (
+                      <div className="space-y-6 pt-4">
+                        {/* Basic Information */}
+                        <div className="grid grid-cols-2 gap-6">
+                          <div>
+                            <h3 className="font-semibold mb-4">Item Information</h3>
+                            <div className="space-y-3">
+                              {evidence.item_type_name && (
+                                <div>
+                                  <div className="text-sm text-gray-600 dark:text-gray-400">Item Type</div>
+                                  <div className="font-medium">{evidence.item_type_name}</div>
+                                  {evidence.item_type_category && (
+                                    <div className="text-sm text-gray-500">({evidence.item_type_category})</div>
+                                  )}
+                                </div>
+                              )}
+                              
+                              <div>
+                                <div className="text-sm text-gray-600 dark:text-gray-400">Collected Date</div>
+                                <div className="font-medium">{new Date(evidence.collected_date).toLocaleDateString()}</div>
+                              </div>
+                              
+                              <div>
+                                <div className="text-sm text-gray-600 dark:text-gray-400">Collected By</div>
+                                <div className="font-medium">{evidence.collected_by}</div>
+                              </div>
+                              
+                              {evidence.collection_location && (
+                                <div>
+                                  <div className="text-sm text-gray-600 dark:text-gray-400">Collection Location</div>
+                                  <div className="font-medium">{evidence.collection_location}</div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
 
-            {/* Chain of Custody Text */}
-            {item.chain_of_custody && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Chain of Custody (Legacy)</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="whitespace-pre-wrap">{item.chain_of_custody}</p>
-                </CardContent>
-              </Card>
-            )}
+                          <div>
+                            <h3 className="font-semibold mb-4">Current Status</h3>
+                            <div className="space-y-3">
+                              {evidence.current_location_name && (
+                                <div className="flex items-start gap-2">
+                                  <MapPin className="h-5 w-5 text-gray-400 mt-0.5" />
+                                  <div>
+                                    <div className="text-sm text-gray-600 dark:text-gray-400">Location</div>
+                                    <div className="font-medium">{evidence.current_location_name}</div>
+                                    {evidence.current_location_building && (
+                                      <div className="text-sm text-gray-500">
+                                        {evidence.current_location_building}
+                                        {evidence.current_location_room && ` - ${evidence.current_location_room}`}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {evidence.current_custodian_name && (
+                                <div className="flex items-start gap-2">
+                                  <User className="h-5 w-5 text-gray-400 mt-0.5" />
+                                  <div>
+                                    <div className="text-sm text-gray-600 dark:text-gray-400">Custodian</div>
+                                    <div className="font-medium">{evidence.current_custodian_name}</div>
+                                  </div>
+                                </div>
+                              )}
+                              
+                              <div className="flex items-start gap-2">
+                                <Clock className="h-5 w-5 text-gray-400 mt-0.5" />
+                                <div>
+                                  <div className="text-sm text-gray-600 dark:text-gray-400">Created</div>
+                                  <div className="font-medium">{formatDate(evidence.created_at)}</div>
+                                  {evidence.created_by_name && (
+                                    <div className="text-sm text-gray-500">by {evidence.created_by_name}</div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
 
-            {/* Metadata */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Metadata</CardTitle>
-                <CardDescription>System information</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Created By:</span>
-                  <span>{item.created_by_name || 'Unknown'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Created At:</span>
-                  <span>{formatDate(item.created_at)}</span>
-                </div>
-                {item.updated_at && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Last Updated:</span>
-                    <span>{formatDate(item.updated_at)}</span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+                        {/* Extended Fields */}
+                        {evidence.extended_fields && Object.keys(evidence.extended_fields).length > 0 && (
+                          <div>
+                            <h3 className="font-semibold mb-4">Type-Specific Details</h3>
+                            <div className="grid grid-cols-2 gap-4">
+                              {Object.entries(evidence.extended_fields).map(([key, value]) => (
+                                <div key={key}>
+                                  <div className="text-sm text-gray-600 dark:text-gray-400 capitalize">
+                                    {key.replace(/_/g, ' ')}
+                                  </div>
+                                  <div className="font-medium">{value as string || '—'}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
 
-          <TabsContent value="custody" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Chain of Custody History</CardTitle>
-                <CardDescription>Complete transfer history (coming soon)</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Full custody transfer tracking will be available in Phase 4 of the enhancement plan.
-                </p>
-              </CardContent>
-            </Card>
-          </TabsContent>
+                        {/* Notes Section */}
+                        {evidence.notes && (
+                          <div>
+                            <h3 className="font-semibold mb-2">General Notes</h3>
+                            <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                              <p className="text-sm">{evidence.notes}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  },
+                  {
+                    id: 'history',
+                    label: `Chain of Custody (${transfers.length})`,
+                    content: (
+                      <div className="space-y-4 pt-4">
+                        {transfers.length === 0 ? (
+                          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                            No custody transfers recorded
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {transfers.map((transfer: any) => (
+                              <div 
+                                key={transfer.id}
+                                className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg"
+                              >
+                                <div className="flex items-start justify-between mb-3">
+                                  <div>
+                                    <div className="font-semibold capitalize">{transfer.transfer_type} Transfer</div>
+                                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                                      {formatDate(transfer.initiated_at)}
+                                    </div>
+                                  </div>
+                                  <StatusBadge status={transfer.status} />
+                                </div>
+                                
+                                {transfer.transfer_reason && (
+                                  <div className="mb-2">
+                                    <span className="text-sm font-medium">Reason: </span>
+                                    <span className="text-sm">{transfer.transfer_reason}</span>
+                                  </div>
+                                )}
+                                
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                  <div>
+                                    <div className="text-gray-600 dark:text-gray-400">From</div>
+                                    <div>{transfer.from_custodian_name || '—'}</div>
+                                    <div className="text-gray-500">{transfer.from_location_name || '—'}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-gray-600 dark:text-gray-400">To</div>
+                                    <div>{transfer.to_custodian_name || '—'}</div>
+                                    <div className="text-gray-500">{transfer.to_location_name || '—'}</div>
+                                  </div>
+                                </div>
+                                
+                                {transfer.receipt_number && (
+                                  <div className="mt-2 text-xs text-gray-500">
+                                    Receipt: {transfer.receipt_number}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  },
+                  {
+                    id: 'notes',
+                    label: `Notes (${notes.length})`,
+                    content: (
+                      <div className="space-y-4 pt-4">
+                        {/* Add Note */}
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={newNote}
+                            onChange={(e) => setNewNote(e.target.value)}
+                            placeholder="Add a note..."
+                            className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-900"
+                            onKeyPress={(e) => e.key === 'Enter' && handleAddNote()}
+                          />
+                          <button
+                            onClick={handleAddNote}
+                            disabled={addingNote || !newNote.trim()}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                          >
+                            <Plus className="h-4 w-4" />
+                            Add
+                          </button>
+                        </div>
 
-          <TabsContent value="photos" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Evidence Photos</CardTitle>
-                <CardDescription>Associated images and documentation</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Photo management will be available in Phase 4 of the enhancement plan.
-                </p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
+                        {/* Notes List */}
+                        {notes.length === 0 ? (
+                          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                            No notes yet
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {notes.map((note: any) => (
+                              <div 
+                                key={note.id}
+                                className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg"
+                              >
+                                <div className="flex items-start justify-between mb-2">
+                                  <div className="font-medium text-sm">
+                                    {note.created_by_full_name || note.created_by_name}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    {formatDate(note.created_at)}
+                                  </div>
+                                </div>
+                                <p className="text-sm">{note.note}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  },
+                  {
+                    id: 'photos',
+                    label: `Photos (${photos.length})`,
+                    content: (
+                      <div className="space-y-4 pt-4">
+                        {photos.length === 0 ? (
+                          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                            <ImageIcon className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                            <p>No photos uploaded</p>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-3 gap-4">
+                            {photos.map((photo: any) => (
+                              <div key={photo.id} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                                <img 
+                                  src={photo.photo_path} 
+                                  alt={photo.caption || 'Evidence photo'}
+                                  className="w-full h-48 object-cover"
+                                />
+                                {photo.caption && (
+                                  <div className="p-2 text-sm">{photo.caption}</div>
+                                )}
+                                <div className="p-2 text-xs text-gray-500 border-t border-gray-200 dark:border-gray-700">
+                                  {photo.uploaded_by_name} • {formatDate(photo.uploaded_at)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  }
+                ]}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+            Evidence item not found
+          </div>
+        )}
+      </main>
     </div>
   );
 }

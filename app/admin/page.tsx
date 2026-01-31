@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Plus, Edit, Trash2, RefreshCw, ArrowLeft } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { DataTable } from '@/components/ui/data-table';
-import { Tabs } from '@/components/ui/tabs';
+import { TabsWrapper as Tabs } from '@/components/ui/tabs-wrapper';
 import { APP_VERSION } from '@/lib/version';
 
 export default function Admin() {

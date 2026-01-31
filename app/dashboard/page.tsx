@@ -7,7 +7,6 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { DataTable } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { AddEvidenceModal } from '@/components/add-evidence-modal';
-import { EvidenceDetailsModal } from '@/components/evidence-details-modal';
 import { TransferWizard } from '@/components/transfer-wizard';
 import { APP_VERSION, VERSION_LABEL } from '@/lib/version';
 
@@ -18,9 +17,7 @@ export default function Dashboard() {
   
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showTransferWizard, setShowTransferWizard] = useState(false);
-  const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
   
   // Filters
@@ -79,8 +76,7 @@ export default function Dashboard() {
   };
 
   const handleRowClick = (item: any) => {
-    setSelectedItemId(item.id);
-    setShowDetailsModal(true);
+    router.push(`/evidence/${item.id}`);
   };
 
   const handleTransfer = (item: any) => {
@@ -305,15 +301,6 @@ export default function Dashboard() {
           loadData();
           setShowAddModal(false);
         }}
-      />
-
-      <EvidenceDetailsModal
-        isOpen={showDetailsModal}
-        onClose={() => {
-          setShowDetailsModal(false);
-          setSelectedItemId(null);
-        }}
-        evidenceId={selectedItemId}
       />
 
       <TransferWizard

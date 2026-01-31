@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Modal } from './ui/modal';
-import { Tabs } from './ui/tabs';
+import { TabsWrapper as Tabs } from './ui/tabs-wrapper';
 import { StatusBadge } from './ui/status-badge';
 import { Skeleton } from './ui/skeleton';
 import { Clock, MapPin, User, FileText, Image as ImageIcon, GitBranch, Plus } from 'lucide-react';
