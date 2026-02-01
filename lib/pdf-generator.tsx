@@ -1,7 +1,9 @@
 // PDF Receipt Generation for Custody Transfers
 // Uses @react-pdf/renderer for server-side PDF generation
 
+import React from 'react';
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
+import type { DocumentProps } from '@react-pdf/renderer';
 import QRCode from 'qrcode';
 
 // PDF Styles
@@ -125,7 +127,7 @@ export async function generateQRCode(data: string): Promise<string> {
   }
 }
 
-export function CustodyTransferReceipt(data: TransferReceiptData) {
+export function CustodyTransferReceipt(data: TransferReceiptData): React.ReactElement<DocumentProps> {
   const qrCodeData = `RECEIPT:${data.receipt_number}|CASE:${data.evidence.case_number}|ITEM:${data.evidence.item_number}`;
   
   return (
